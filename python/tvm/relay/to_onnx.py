@@ -38,6 +38,10 @@ class OpConverter(object):
     """
     @classmethod
     def convert_attributes(cls, attrs):
+        """convert Relay attributes to ONNX attributes.
+           The derived classes should implement this method if attributes are required by the operator
+           otherwise by default no attributes are passed
+        """
         return {}
 
     @classmethod
@@ -47,8 +51,10 @@ class OpConverter(object):
         model_container.add_nodes([node])
 
 
-def rename(name):
-    return type(name, (OpConverter,), {})
+def rename(op_name):
+    """ This method creates dynamic operator of name op_name with empty attributes
+    """
+    return type(op_name, (OpConverter,), {})
 
 
 class Reshape(object):
@@ -244,17 +250,16 @@ class ModelContainer(object):
         return onnx.helper.make_model(graph_def, producer_name='relay')
 
 
-class RelayNodesToONNX(object):
-    """A helper class for handling Relay expression copying from pb2.GraphProto.
-    Definition: https://github.com/onnx/onnx/blob/master/onnx/onnx.proto
+class RelayToONNXConverter(object):
+    """A helper class converting topologically sorted  Relay Node list to ONNX model
 
-        Parameters
+    Parameters
     ----------
-    shape : dict of str to tuple, optional
-        The input shape to the graph
+    name : str
+       name of the model
 
-    dtype : str or dict of str to str
-        The input types to the graph
+    node_list : list
+        topologically sorted Relay Node entry list
     """
 
     def __init__(self, name, node_list, params):
@@ -354,7 +359,8 @@ def to_onnx(relay_module, params, name, path):
     relay_module : tvm.relay.Module
              The relay module object
 
-    params : Dict of param names and NDarray values
+    params : dict
+        dict of the parameter names and NDarray values
 
     path : str
         The path where ONNX model will be saved
@@ -362,13 +368,13 @@ def to_onnx(relay_module, params, name, path):
     Returns
     -------
     inferred_model : tvm.relay.Module
-        The relay module for compilation
+        The relay module
 
     """
     node_list = []  # ONNX needs a topologically sorted list of nodes
     node_dict = {}
     _expr2graph_impl(relay_module["main"], [], node_dict, node_list)
-    converter = RelayNodesToONNX(name, node_list, params)
+    converter = RelayToONNXConverter(name, node_list, params)
     onnx_model = converter.convert_to_onnx()
     onnx.save(onnx_model, path)
 
