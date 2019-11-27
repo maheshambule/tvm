@@ -20,6 +20,7 @@
 import numpy
 import onnx
 import onnx.utils
+from onnx import numpy_helper
 import tvm
 from tvm.autotvm.graph_tuner.utils.traverse_graph import _expr2graph_impl
 from tvm.relay.expr import Call, Function, TupleGetItem, Var, Constant, Tuple
@@ -69,7 +70,7 @@ class Reshape(object):
         model_container.add_nodes([node])
         input = onnx.helper.make_tensor_value_info(input_name, onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[shape.dtype], shape = shape.shape)
         model_container.add_inputs([input])
-        shape_tensor = onnx.numpy_helper.from_array(shape, input_name)
+        shape_tensor = numpy_helper.from_array(shape, input_name)
         model_container.add_initializers([shape_tensor])
 
 
@@ -104,9 +105,7 @@ class Transpose(OpConverter):
     """
     @classmethod
     def convert_attributes(cls, attrs):
-        return {
-                'perm': attrs.get_int_tuple("axes"),
-             }
+        return {'perm': attrs.get_int_tuple("axes")} if attrs["axes"] else {}
 
 
 class MatMul(OpConverter):
@@ -211,7 +210,8 @@ relay_to_onnx_op_mapping = {
   'global_avg_pool2d': rename('GlobalAveragePool'),
   'concatenate': Concat,
   'dropout': Dropout,
-  'avg_pool2d': AveragePool
+  'avg_pool2d': AveragePool,
+  'divide': rename('Div')
 }
 
 
@@ -271,6 +271,7 @@ class RelayToONNXConverter(object):
     def convert_to_onnx(self):
         """ Loop through topologically sorted list of Relay nodes and generate a ONNX model"""
         for idx, node_entry in enumerate(self._node_list):
+            out_idx = idx
             node = node_entry['node']
             if isinstance(node, Call):
                 self._add_node(node_entry, idx)
@@ -279,12 +280,12 @@ class RelayToONNXConverter(object):
             elif isinstance(node, Constant):
                 self._add_constant_input(node_entry, idx)
             elif isinstance(node, (TupleGetItem, Tuple)):
-                pass
+                out_idx = idx - 1  # Need to work on this. No equivalent ONNX operator found yet
             else:
                 raise NotImplementedError("Relay Node of type {0} is not implemented yet".format(type(node)))
 
             if idx == len(self._node_list) - 1:
-                self._add_output(node_entry, idx)
+                self._add_output(self._node_list[out_idx], out_idx)
 
         model = self._mc.make_model()
         polished_model = onnx.utils.polish_model(model)
@@ -310,11 +311,11 @@ class RelayToONNXConverter(object):
         converter.convert(node_entry, self._mc, self._node_list)
 
     def _add_params(self,node_entry, idx):
-        """Add param value to initilizer and name to inputs"""
+        """Add param value to initializer and name to inputs"""
         param_name = node_entry['name']
         value = self._params[param_name]
         numpy_array = value.asnumpy()
-        tensor = onnx.numpy_helper.from_array(numpy_array, param_name)
+        tensor = numpy_helper.from_array(numpy_array, param_name)
         self._mc.add_initializers([tensor])
         input = onnx.helper.make_tensor_value_info(param_name, onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[numpy_array.dtype],
                                               shape=numpy_array.shape)
@@ -376,6 +377,8 @@ def to_onnx(relay_module, params, name, path):
     _expr2graph_impl(relay_module["main"], [], node_dict, node_list)
     converter = RelayToONNXConverter(name, node_list, params)
     onnx_model = converter.convert_to_onnx()
-    onnx.save(onnx_model, path)
+    if path:
+        onnx.save(onnx_model, path)
+    return onnx_model
 
 
