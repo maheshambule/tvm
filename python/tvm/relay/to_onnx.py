@@ -14,16 +14,15 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=invalid-name, import-self, len-as-condition, unused-argument, too-many-lines
+# pylint: disable=invalid-name, import-self, len-as-condition, unused-argument, too-many-lines, redefined-builtin
 """Relay to ONNX serialization """
 
 import numpy
 import onnx
 import onnx.utils
 from onnx import numpy_helper
-import tvm
 from tvm.autotvm.graph_tuner.utils.traverse_graph import _expr2graph_impl
-from tvm.relay.expr import Call, Function, TupleGetItem, Var, Constant, Tuple
+from tvm.relay.expr import Call, TupleGetItem, Var, Constant, Tuple
 
 
 def relay_layout_to_storage_order(storage_order):
@@ -40,7 +39,8 @@ class OpConverter(object):
     @classmethod
     def convert_attributes(cls, attrs):
         """convert Relay attributes to ONNX attributes.
-           The derived classes should implement this method if attributes are required by the operator
+           The derived classes should implement this method
+           if attributes are required by the operator
            otherwise by default no attributes are passed
         """
         return {}
@@ -48,7 +48,10 @@ class OpConverter(object):
     @classmethod
     def convert(cls, node, model_container, node_list):
         attrs = cls.convert_attributes(node['node'].attrs)
-        node = onnx.helper.make_node(cls.__name__, node['input_names'], node['output_names'], **attrs)
+        node = onnx.helper.make_node(cls.__name__,
+                                     node['input_names'],
+                                     node['output_names'],
+                                     **attrs)
         model_container.add_nodes([node])
 
 
@@ -64,11 +67,20 @@ class Reshape(object):
 
     @classmethod
     def convert(cls, node, model_container, node_list):
-        shape = numpy.asarray([a.value for a in node['node'].attrs.newshape], dtype=node['node'].attrs.newshape[0].dtype)
+        """Converts Relay operator Reshape to ONNX operator.
+           Relay operator accepts shape as attribute but ONNX operator
+           accepts it as a input.
+        """
+
+        shape = numpy.asarray([a.value for a in node['node'].attrs.newshape],
+                              dtype=node['node'].attrs.newshape[0].dtype)
         input_name = 'shape{}'.format(node['output_names'][0])
-        node = onnx.helper.make_node(cls.__name__, [node['input_names'][0], input_name], node['output_names'])
+        node = onnx.helper.make_node(cls.__name__, [node['input_names'][0], input_name],
+                                     node['output_names'])
         model_container.add_nodes([node])
-        input = onnx.helper.make_tensor_value_info(input_name, onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[shape.dtype], shape = shape.shape)
+        input = onnx.helper.make_tensor_value_info(input_name,
+                                                   onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[shape.dtype],
+                                                   shape=shape.shape)
         model_container.add_inputs([input])
         shape_tensor = numpy_helper.from_array(shape, input_name)
         model_container.add_initializers([shape_tensor])
@@ -80,12 +92,12 @@ class Conv(OpConverter):
     @classmethod
     def convert_attributes(cls, attrs):
         return {
-               'group': attrs.get_int("groups"),
-               'pads': attrs.get_int_tuple("padding") + attrs.get_int_tuple("padding"),
-               'strides': attrs.get_int_tuple("strides"),
-               'dilations': attrs.get_int_tuple("dilation"),
-               'kernel_shape': attrs.get_int_tuple("kernel_size"),
-             }
+            'group': attrs.get_int("groups"),
+            'pads': attrs.get_int_tuple("padding") + attrs.get_int_tuple("padding"),
+            'strides': attrs.get_int_tuple("strides"),
+            'dilations': attrs.get_int_tuple("dilation"),
+            'kernel_shape': attrs.get_int_tuple("kernel_size"),
+            }
 
 
 class MaxPool(OpConverter):
@@ -94,10 +106,10 @@ class MaxPool(OpConverter):
     @classmethod
     def convert_attributes(cls, attrs):
         return {
-               'pads': attrs.get_int_tuple("padding") + attrs.get_int_tuple("padding"),
-               'strides': attrs.get_int_tuple("strides"),
-               'kernel_shape': attrs.get_int_tuple("pool_size"),
-             }
+            'pads': attrs.get_int_tuple("padding") + attrs.get_int_tuple("padding"),
+            'strides': attrs.get_int_tuple("strides"),
+            'kernel_shape': attrs.get_int_tuple("pool_size"),
+            }
 
 
 class Transpose(OpConverter):
@@ -114,7 +126,10 @@ class MatMul(OpConverter):
     @classmethod
     def convert(cls, node, model_container, node_list):
         output_name = 'inter{}'.format(node['output_names'][0])
-        transpose_node = onnx.helper.make_node(Transpose.__name__, [node['input_names'][1]], [output_name], **{'perm':(1,0)})
+        transpose_node = onnx.helper.make_node(Transpose.__name__,
+                                               [node['input_names'][1]],
+                                               [output_name],
+                                               **{'perm': (1, 0)})
         model_container.add_nodes([transpose_node])
 
         inputs = [node['input_names'][0], output_name]
@@ -128,8 +143,8 @@ class Flatten(OpConverter):
     @classmethod
     def convert_attributes(cls, attrs):
         return {
-              'axis': 1,
-             }
+            'axis': 1,
+            }
 
 
 class BatchNormalization(OpConverter):
@@ -137,10 +152,11 @@ class BatchNormalization(OpConverter):
     """
     @classmethod
     def convert_attributes(cls, attrs):
-        return {'epsilon': float(attrs.get_str('epsilon')),
-                'momentum': float('0.8999999761581421'),
-                # 'spatial' : 1 #TODO - version based support
-                }
+        return {
+            'epsilon': float(attrs.get_str('epsilon')),
+            'momentum': float('0.8999999761581421'),
+            # 'spatial' : 1 #TODO - version based support
+            }
 
 
 class Dropout(OpConverter):
@@ -149,14 +165,13 @@ class Dropout(OpConverter):
     @classmethod
     def convert_attributes(cls, attrs):
         return {
-                'ratio': float(attrs.get_str('rate')),
-            }
+            'ratio': float(attrs.get_str('rate')),
+        }
 
 
 class AveragePool(MaxPool):
     """ Operator converter for AveragePool.
     """
-    pass
 
 
 class Concat(OpConverter):
@@ -165,8 +180,8 @@ class Concat(OpConverter):
     @classmethod
     def convert_attributes(cls, attrs):
         return {
-              'axis': attrs.get_int("axis"),
-             }
+            'axis': attrs.get_int("axis"),
+            }
 
 
 class BiasAdd(OpConverter):
@@ -184,8 +199,10 @@ class BiasAdd(OpConverter):
         num_newaxis = data_ndim - axis - 1
         if num_newaxis:
             output_name = 'inter{}'.format(node['output_names'][0])
-            transpose_node = onnx.helper.make_node('Unsqueeze', [node['input_names'][1]], [output_name],
-                                              **{'axes': tuple(range(1,num_newaxis+1))})
+            transpose_node = onnx.helper.make_node('Unsqueeze',
+                                                   [node['input_names'][1]],
+                                                   [output_name],
+                                                   **{'axes': tuple(range(1, num_newaxis+1))})
             model_container.add_nodes([transpose_node])
         else:
             output_name = node['input_names'][1]
@@ -196,22 +213,22 @@ class BiasAdd(OpConverter):
 
 
 relay_to_onnx_op_mapping = {
-  'reshape': Reshape,
-  'conv2d': Conv,
-  'add': rename('Add'),
-  'relu': rename('Relu'),
-  'transpose': Transpose,
-  'dense': MatMul,
-  'max_pool2d': MaxPool,
-  'batch_flatten': Flatten,
-  'multiply': rename('Mul'),
-  'bias_add': BiasAdd,
-  'batch_norm': BatchNormalization,
-  'global_avg_pool2d': rename('GlobalAveragePool'),
-  'concatenate': Concat,
-  'dropout': Dropout,
-  'avg_pool2d': AveragePool,
-  'divide': rename('Div')
+    'reshape': Reshape,
+    'conv2d': Conv,
+    'add': rename('Add'),
+    'relu': rename('Relu'),
+    'transpose': Transpose,
+    'dense': MatMul,
+    'max_pool2d': MaxPool,
+    'batch_flatten': Flatten,
+    'multiply': rename('Mul'),
+    'bias_add': BiasAdd,
+    'batch_norm': BatchNormalization,
+    'global_avg_pool2d': rename('GlobalAveragePool'),
+    'concatenate': Concat,
+    'dropout': Dropout,
+    'avg_pool2d': AveragePool,
+    'divide': rename('Div')
 }
 
 
@@ -282,7 +299,8 @@ class RelayToONNXConverter(object):
             elif isinstance(node, (TupleGetItem, Tuple)):
                 out_idx = idx - 1  # Need to work on this. No equivalent ONNX operator found yet
             else:
-                raise NotImplementedError("Relay Node of type {0} is not implemented yet".format(type(node)))
+                raise NotImplementedError("Relay Node of type {0} is not "
+                                          "implemented yet".format(type(node)))
 
             if idx == len(self._node_list) - 1:
                 self._add_output(self._node_list[out_idx], out_idx)
@@ -298,7 +316,8 @@ class RelayToONNXConverter(object):
     def _add_node(self, node_entry, idx):
         """Convert Relay operator node to ONNX opeartor and add it to container nodes list"""
         if node_entry['op'] not in relay_to_onnx_op_mapping:
-            raise NotImplementedError("Currently the operator '{0}' is not supported.".format(node_entry['op']))
+            raise NotImplementedError("Currently the operator '{0}' is "
+                                      "not supported.".format(node_entry['op']))
 
         converter = relay_to_onnx_op_mapping[node_entry['op']]()
         node_entry['output_names'] = [self._tuple_to_name([idx, 0, 0])]
@@ -310,19 +329,23 @@ class RelayToONNXConverter(object):
                 node_entry['input_names'].append(self._tuple_to_name(input_idx_tuple))
         converter.convert(node_entry, self._mc, self._node_list)
 
-    def _add_params(self,node_entry, idx):
+    def _add_params(self, node_entry, idx):
         """Add param value to initializer and name to inputs"""
         param_name = node_entry['name']
         value = self._params[param_name]
         numpy_array = value.asnumpy()
         tensor = numpy_helper.from_array(numpy_array, param_name)
         self._mc.add_initializers([tensor])
-        input = onnx.helper.make_tensor_value_info(param_name, onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[numpy_array.dtype],
-                                              shape=numpy_array.shape)
+        dtype = onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[numpy_array.dtype]
+        input = onnx.helper.make_tensor_value_info(param_name,
+                                                   dtype,
+                                                   shape=numpy_array.shape)
         self._mc.add_inputs([input])
 
     def _add_constant_input(self, node_entry, idx):
-        """Create named input for constant and add it to container inputs. If input is a parameter then add to param"""
+        """Create named input for constant and add it to container inputs.
+        If input is a parameter then add to param
+        """
         node = node_entry['node']
         if not node_entry['name']:
             node_entry['name'] = self._tuple_to_name([idx, 0, 0])
@@ -336,18 +359,20 @@ class RelayToONNXConverter(object):
             self._add_params(node_entry, idx)
         else:
             type = node_entry['types'][0]
+            dtype = onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[numpy.dtype(type.dtype)]
             input = onnx.helper.make_tensor_value_info(node_entry['name'],
-                                                   onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[numpy.dtype(type.dtype)],
-                                                   shape=type.concrete_shape)
+                                                       dtype,
+                                                       shape=type.concrete_shape)
             self._mc.add_inputs([input])
 
     def _add_output(self, node_entry, idx):
         """Add output node to container outputs."""
 
         type = node_entry['types'][0]  # TODO - what if there are multiple outputs
+        dtype = onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[numpy.dtype(type.dtype)]
         output = onnx.helper.make_tensor_value_info(self._tuple_to_name([idx, 0, 0]),
-                                               onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[numpy.dtype(type.dtype)],
-                                               shape=type.concrete_shape)
+                                                    dtype,
+                                                    shape=type.concrete_shape)
         self._mc.add_outputs([output])
 
 
@@ -380,5 +405,3 @@ def to_onnx(relay_module, params, name, path):
     if path:
         onnx.save(onnx_model, path)
     return onnx_model
-
-
