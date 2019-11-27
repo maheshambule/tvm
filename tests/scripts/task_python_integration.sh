@@ -27,6 +27,13 @@ rm -rf python/tvm/*.pyc python/tvm/*/*.pyc python/tvm/*/*/*.pyc
 # Test TVM
 make cython3
 
+
+#Install onnx & onnxruntime for testing Relay to ONNX implementation
+echo "Installing onnx and onnx runtime"
+pip3 install onnx --user
+pip3 install onnxruntime --user
+
+
 # Test extern package
 cd apps/extension
 rm -rf lib
