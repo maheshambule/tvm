@@ -1,12 +1,26 @@
-import os
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+# pylint: disable=invalid-name, import-self, len-as-condition, unused-argument, too-many-lines
+"""Relay to ONNX serialization test cases"""
 import numpy as np
 import tvm
 from tvm import relay
 from tvm.relay import to_onnx
 import onnxruntime as rt
-import topi.testing
-import onnx
-from tvm.relay.testing import ctx_list
 
 
 def func_to_onnx(func, name):
@@ -74,10 +88,8 @@ def test_bias_add():
 def test_conv2d():
     def run_test_conv2d(dtype, out_dtype, scale, dshape, kshape,
                         padding=(1, 1),
-                        fref=None,
                         groups=1,
                         dilation=(1, 1),
-                        except_targets=None,
                         **attrs):
 
         x = relay.var("x", shape=dshape, dtype=dtype)
@@ -95,29 +107,21 @@ def test_conv2d():
 
         tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
 
-        # depthwise conv2d
 
     dshape = (1, 32, 18, 18)
     kshape = (32, 1, 3, 3)
     run_test_conv2d("float32", "float32", 1, dshape, kshape,
-                    padding=(1, 1), channels=32, groups=32, kernel_size=(3, 3),
-                    fref=lambda x, w: topi.testing.depthwise_conv2d_python_nchw(
-                        x, w, (1, 1), "SAME"))
+                    padding=(1, 1), channels=32, groups=32, kernel_size=(3, 3))
 
-    # CUDA is disabled for 'direct' schedule:
-    # https://github.com/apache/incubator-tvm/pull/3070#issuecomment-486597553
-    # group conv2d
     dshape = (1, 32, 18, 18)
     kshape = (32, 4, 3, 3)
     run_test_conv2d("float32", "float32", 1, dshape, kshape,
-                    padding=(1, 1), channels=32, groups=8, kernel_size=(3, 3),
-                    except_targets=['cuda'])
+                    padding=(1, 1), channels=32, groups=8, kernel_size=(3, 3))
     # also group conv2d
     dshape = (1, 32, 18, 18)
     kshape = (64, 1, 3, 3)
     run_test_conv2d("float32", "float32", 1, dshape, kshape,
-                    padding=(1, 1), channels=64, groups=32, kernel_size=(3, 3),
-                    except_targets=['cuda'])
+                    padding=(1, 1), channels=64, groups=32, kernel_size=(3, 3))
 
     # normal conv2d
     dshape = (1, 3, 224, 224)
