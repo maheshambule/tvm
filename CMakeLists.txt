@@ -53,6 +53,7 @@ tvm_option(PICOJSON_PATH "Path to PicoJSON" "3rdparty/picojson")
 # Contrib library options
 tvm_option(USE_BLAS "The blas library to be linked" none)
 tvm_option(USE_MKL_PATH "MKL root path when use MKL blas" none)
+tvm_option(USE_MKLDNN "Build with MKLDNN" OFF)
 tvm_option(USE_CUDNN "Build with cuDNN" OFF)
 tvm_option(USE_CUBLAS "Build with cuBLAS" OFF)
 tvm_option(USE_MIOPEN "Build with ROCM:MIOpen" OFF)
@@ -231,6 +232,12 @@ if(USE_VM_PROFILER)
   file(GLOB RUNTIME_VM_PROFILER_SRCS src/runtime/vm/profiler/*.cc)
   list(APPEND RUNTIME_SRCS ${RUNTIME_VM_PROFILER_SRCS})
 endif(USE_VM_PROFILER)
+
+if(USE_EXAMPLE_EXT_RUNTIME)
+  message(STATUS "Build with example external runtime...")
+  file(GLOB RUNTIME_EXAMPLE_EXTERNAL_SRCS src/runtime/contrib/example_ext_runtime/*.cc)
+  list(APPEND RUNTIME_SRCS ${RUNTIME_EXAMPLE_EXTERNAL_SRCS})
+endif(USE_EXAMPLE_EXT_RUNTIME)
 
 # Module rules
 include(cmake/modules/VTA.cmake)

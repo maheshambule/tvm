@@ -22,6 +22,7 @@ from tvm import autotvm
 from tvm import relay
 from tvm.relay import transform
 from tvm.relay.testing import ctx_list
+from tvm.contrib import util
 import topi.testing
 
 def run_infer_type(expr):
@@ -134,6 +135,46 @@ def test_conv2d_run():
             op_res1 = intrp1.evaluate(func)(data, kernel)
             tvm.testing.assert_allclose(op_res1.asnumpy(), ref_res, rtol=1e-5, atol=1e-5)
 
+    def compile_test_conv2d_arm_cpu(dtype, out_dtype, scale, dshape, kshape,
+                        padding=(1, 1),
+                        groups=1,
+                        dilation=(1, 1),
+                        **attrs):
+        x = relay.var("x", shape=dshape, dtype=dtype)
+        w = relay.var("w", dtype=dtype)
+        y = relay.nn.conv2d(x, w,
+                            padding=padding,
+                            dilation=dilation,
+                            groups=groups,
+                            **attrs)
+        func = relay.Function([x, w], y)
+        mod = tvm.relay.Module()
+        mod["main"] = func
+
+        test_schedule='{"i": ["llvm -device=arm_cpu", "topi_nn_depthwise_conv2d_nchw", \
+                        [["TENSOR", [1, 512, 32, 32], "float32"], \
+                        ["TENSOR", [512, 1, 3, 3], "float32"], \
+                        [1, 1], [1, 1], [1, 1], "float32"], {}, \
+                        ["depthwise_conv2d_nchw", [1, 512, 32, 32, "float32"], \
+                        [512, 1, 3, 3, "float32"], [1, 1], [1, 1], [1, 1], "float32"], \
+                        {"i": 743640, "t": "contrib_spatial_pack", "c": null, \
+                        "e": [["tile_co", "sp", [512, 1]], ["tile_oh", "sp", [8, 1]], \
+                        ["tile_ow", "sp", [1, 8]], \
+                        ["reorder_0", "re", [0, 1, 2, 3, 4, 5, 8, 6, 7]], \
+                        ["reorder_1", "re", [0, 1, 2, 3, 6, 4, 5]], \
+                        ["ann_reduce", "an", ["unroll", "none"]], \
+                        ["ann_spatial", "an", ["unroll", "unroll", "vec"]], \
+                        ["data_pad_inline", "ot", 4], ["data_vec_inline", "ot", 1], \
+                        ["conv_inline", "ot", 0]]}], "r": [[0.0002933163], \
+                        0, 3.1976189613342285, 1570811630.6058347], "v": 0.1}'
+        temp = util.tempdir()
+        with open(temp.relpath("temp.log"), "w") as log_file:
+            log_file.write(test_schedule)
+        with autotvm.apply_history_best(temp.relpath("temp.log")):
+            with relay.build_config(opt_level=3):
+                print('Compiling...')
+                graph_json, mod, params = tvm.relay.build(mod, target="llvm -device=arm_cpu")
+
     # depthwise conv2d
     dshape = (1, 32, 18, 18)
     kshape = (32, 1, 3, 3)
@@ -141,6 +182,13 @@ def test_conv2d_run():
                     padding=(1, 1), channels=32, groups=32, kernel_size=(3 ,3),
                     fref=lambda x, w: topi.testing.depthwise_conv2d_python_nchw(
                         x, w, (1, 1), "SAME"))
+
+    # depthwise conv2d for arm_cpu
+    dshape = (1, 512, 32, 32)
+    kshape = (512, 1, 3, 3)
+    compile_test_conv2d_arm_cpu("float32", "float32", 1, dshape, kshape,
+                                padding=(1, 1), channels=512, 
+                                groups=512, kernel_size=(3 ,3))
 
     # CUDA is disabled for 'direct' schedule:
     # https://github.com/apache/incubator-tvm/pull/3070#issuecomment-486597553
@@ -263,8 +311,8 @@ def test_conv2d_transpose_infer_type():
         (10, 15, 3, 3), "float32")
 
     # infer by shape of w, mixed precision
-    n, c, h, w = tvm.var("n"), 10, 10, 12
-    x = relay.var("x", relay.TensorType((n, c, h, w), "float32"))
+    n, h, w, c = tvm.var("n"), 10, 10, 12
+    x = relay.var("x", relay.TensorType((n, h, w, c), "float32"))
     w = relay.var("w", relay.TensorType((12, 11, 5, 5), "float32"))
     y = relay.nn.conv2d_transpose(x, w,
                                   output_padding=(1, 1),
@@ -275,7 +323,7 @@ def test_conv2d_transpose_infer_type():
         (n, 15, 15, 11), "float32")
 
 
-def test_conv2d_transpose_run():
+def test_conv2d_transpose_nchw_run():
     dshape = (1, 3, 18, 18)
     kshape = (3, 10, 3, 3)
     oshape = (1, 10, 37, 37)
@@ -299,6 +347,33 @@ def test_conv2d_transpose_run():
         op_res1 = intrp1.evaluate(func)(data, kernel)
         tvm.testing.assert_allclose(op_res1.asnumpy(), ref_res, rtol=1e-5, atol=1e-5)
 
+
+def test_conv2d_transpose_nhwc_run():
+    dshape_nhwc = (1, 18, 18, 3)
+    kshape_hwoi = (3, 3, 10, 3)
+    oshape_nhwc = (1, 37, 37, 10)
+    x = relay.var("x", shape=dshape_nhwc)
+    w = relay.var("w")
+    # kshape and kernel_layout should have swapped IO.
+    # kshape is HWOI and kernel_layout is HWIO
+    y = relay.nn.conv2d_transpose(x, w,
+                                  channels=10, kernel_size=(3, 3), strides=(2, 2),
+                                  padding=(1, 1), output_padding=(2, 2),
+                                  data_layout="NHWC", kernel_layout="HWIO")
+    func = relay.Function([x, w], y)
+    dtype = "float32"
+    data = np.random.uniform(size=dshape_nhwc).astype(dtype)
+    kernel = np.random.uniform(size=kshape_hwoi).astype(dtype)
+    # use true kshape layout here - HWOI
+    c_np = topi.testing.conv2d_transpose_nhwc_python(data, kernel, 'HWOI', 2, 1)
+    d_np = np.zeros(shape=oshape_nhwc)
+    d_np[:,0:c_np.shape[1],0:c_np.shape[2],:] = c_np
+    ref_res = d_np
+
+    for target, ctx in ctx_list():
+        intrp1 = relay.create_executor("graph", ctx=ctx, target=target)
+        op_res1 = intrp1.evaluate(func)(data, kernel)
+        tvm.testing.assert_allclose(op_res1.asnumpy(), ref_res, rtol=1e-5, atol=1e-5)
 
 
 def test_upsampling_infer_type():
@@ -771,7 +846,8 @@ if __name__ == "__main__":
     test_pad_infer_type()
     test_pad_run()
     test_conv2d_transpose_infer_type()
-    test_conv2d_transpose_run()
+    test_conv2d_transpose_nchw_run()
+    test_conv2d_transpose_nhwc_run()
     test_conv2d_run()
     test_conv2d_winograd()
     test_bitserial_conv2d_infer_type()

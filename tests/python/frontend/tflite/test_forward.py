@@ -38,6 +38,7 @@ try:
 except ImportError:
     from tensorflow.contrib import lite as interpreter_wrapper
 
+from tvm.contrib.download import download_testdata
 import tvm.relay.testing.tf as tf_testing
 from packaging import version as package_version
 
@@ -721,6 +722,19 @@ def _test_reduce(math_op, data, keep_dims=None):
         out = math_op(in_data, data[1], keep_dims)
         compare_tflite_with_tvm([data[0]], ['in:0'], [in_data], [out])
 
+def _test_reduce_quantize(math_op, data, keep_dims=None):
+    """ One iteration of reduce """
+
+    assert len(data) == 2
+
+    # Test with tensor and constant
+    with tf.Graph().as_default():
+        in_data = [array_ops.placeholder(shape=data[0].shape, dtype="float32", name='in')]
+        inq_data = [tf.quantization.fake_quant_with_min_max_args(in_data[0], min=-100, max=100, name="inq_0")]
+        out = math_op(inq_data, data[1], keep_dims)
+        out = tf.quantization.fake_quant_with_min_max_args(out, min=-200, max=200, name="out")
+        compare_tflite_with_tvm([data[0]], ['inq_0:0'], [inq_data[0]], [out], quantized=True)
+
 
 #######################################################################
 # Reduce_min
@@ -742,9 +756,12 @@ def _test_reduce_max(data, keep_dims=None):
 # Reduce_mean
 # -----------
 
-def _test_reduce_mean(data, keep_dims=None):
+def _test_reduce_mean(data, keep_dims=None, quantized=False):
     """ One iteration of reduce_mean """
-    return _test_reduce(math_ops.reduce_mean, data, keep_dims)
+    if quantized:
+        return _test_reduce_quantize(math_ops.reduce_mean, data, keep_dims)
+    else:
+        return _test_reduce(math_ops.reduce_mean, data, keep_dims)
 
 #######################################################################
 # Reduce_prod
@@ -774,11 +791,17 @@ def _test_forward_reduce(testop):
     testop(data1, keep_dims=False)
     testop(data1, keep_dims=True)
 
+def _test_forward_reduce_quantized(testop):
+    data0 = [np.array(np.random.uniform(0, 255, (3, 6)), dtype=np.uint8), np.array([1, 2], dtype=np.int32)]
+    testop(data0, quantized=True)
+    testop(data0, keep_dims=False, quantized=True)
+    testop(data0, keep_dims=True, quantized=True)
 
 def test_all_reduce():
     _test_forward_reduce(_test_reduce_min)
     _test_forward_reduce(_test_reduce_max)
     _test_forward_reduce(_test_reduce_mean)
+    _test_forward_reduce_quantized(_test_reduce_mean)
     _test_forward_reduce(_test_reduce_prod)
     _test_forward_reduce(_test_reduce_sum)
 
@@ -934,18 +957,18 @@ def test_forward_relu():
     """ ReLU """
     _test_relu(np.arange(6.0, dtype=np.float32).reshape((1, 6)))
 
-def _test_prelu(data):
+def _test_prelu(data, alpha):
     """ One iteration of PReLU """
     with tf.Graph().as_default():
         in_data = array_ops.placeholder(shape=data.shape, dtype=data.dtype)
-        alpha = np.full((data.shape[-1],), 0.2, dtype=data.dtype)
         # This specific pattern will be replaced into PRelu by tflite
         out = nn_ops.relu(in_data) + (-alpha * nn_ops.relu(-in_data))
         compare_tflite_with_tvm(data, 'Placeholder:0', [in_data], [out])
 
 def test_forward_prelu():
     """ PReLU """
-    _test_prelu(np.random.uniform(-5, 5, size=(1, 32, 32, 3)).astype("float32"))
+    _test_prelu(np.random.uniform(-5, 5, size=(1, 32, 32, 3)).astype("float32"), np.full((3,), 0.2, dtype="float32"))
+    _test_prelu(np.random.uniform(-5, 5, size=(1, 32, 32, 3)).astype("float32"), np.full((1, 1, 3), 0.2, dtype="float32"))
 
 #######################################################################
 # Fully Connected
@@ -1133,9 +1156,29 @@ def test_forward_ssd_mobilenet_v1():
         tflite_model_buf = f.read()
     data = np.random.uniform(size=(1, 300, 300, 3)).astype('float32')
     tflite_output = run_tflite_graph(tflite_model_buf, data)
-    tvm_output = run_tvm_graph(tflite_model_buf, data, 'normalized_input_image_tensor')
-    tvm.testing.assert_allclose(np.squeeze(tvm_output[0]), np.squeeze(tflite_output[0]),
-                                rtol=1e-5, atol=1e-5)
+    tvm_output = run_tvm_graph(tflite_model_buf, data, 'normalized_input_image_tensor', num_output=2)
+    for i in range(2):
+        tvm.testing.assert_allclose(np.squeeze(tvm_output[i]), np.squeeze(tflite_output[i]),
+                                    rtol=1e-5, atol=2e-5)
+
+#######################################################################
+# MediaPipe
+# -------------
+
+def test_forward_mediapipe_hand_landmark():
+    """Test MediaPipe 2D hand landmark TF Lite model."""
+    # MediaPipe 2D hand landmark TF
+    tflite_model_file = download_testdata(
+        "https://github.com/google/mediapipe/raw/master/mediapipe/models/hand_landmark.tflite",
+        "hand_landmark.tflite")
+    with open(tflite_model_file, "rb") as f:
+        tflite_model_buf = f.read()
+    data = np.random.uniform(size=(1, 256, 256, 3)).astype('float32')
+    tflite_output = run_tflite_graph(tflite_model_buf, data)
+    tvm_output = run_tvm_graph(tflite_model_buf, data, 'input_1', num_output=2)
+    for i in range(2):
+        tvm.testing.assert_allclose(np.squeeze(tvm_output[i]), np.squeeze(tflite_output[i]),
+                                    rtol=1e-5, atol=1e-5)
 
 #######################################################################
 # Main
@@ -1192,6 +1235,7 @@ if __name__ == '__main__':
     test_forward_inception_v3_net()
     test_forward_inception_v4_net()
     test_forward_ssd_mobilenet_v1()
+    test_forward_mediapipe_hand_landmark()
 
     # End to End quantized
     test_forward_qnn_inception_v1_net()

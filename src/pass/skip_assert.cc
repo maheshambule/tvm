@@ -17,34 +17,31 @@
  * under the License.
  */
 
-/*!
- * \file src/relay/backend/vm/profiler/compiler.cc
- * \brief A compiler from relay::Module to the VM byte code.
- */
-
-#include "../../../../runtime/vm/profiler/vm.h"
-#include "../compiler.h"
+#include <tvm/ir.h>
+#include <tvm/ir_pass.h>
+#include <tvm/ir_mutator.h>
 
 namespace tvm {
-namespace relay {
-namespace vm {
+namespace ir {
 
-class VMCompilerDebug : public VMCompiler {
+class AssertSkipper : public IRMutator {
  public:
-  VMCompilerDebug() {}
-  virtual ~VMCompilerDebug() {}
+  Stmt Mutate_(const AssertStmt* op, const Stmt& s) final {
+    Stmt stmt = IRMutator::Mutate_(op, s);
+    op = stmt.as<AssertStmt>();
+    return op->body;
+  }
 };
 
-runtime::Module CreateVMCompilerDebug() {
-  auto exec = make_object<VMCompilerDebug>();
-  return runtime::Module(exec);
+Stmt SkipAssert(Stmt stmt) {
+  return AssertSkipper().Mutate(stmt);
 }
 
-TVM_REGISTER_GLOBAL("relay._vm._VMCompilerProfiler")
-    .set_body([](TVMArgs args, TVMRetValue* rv) {
-      *rv = CreateVMCompilerDebug();
-    });
+LoweredFunc SkipAssert(LoweredFunc f) {
+  auto n = make_node<LoweredFuncNode>(*f.operator->());
+  n->body = SkipAssert(f->body);
+  return LoweredFunc(n);
+}
 
-}  // namespace vm
-}  // namespace relay
+}  // namespace ir
 }  // namespace tvm

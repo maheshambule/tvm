@@ -18,7 +18,6 @@
  */
 
 /*!
- *  Copyright (c) 2018 by Contributors
  * \file type_infer.cc
  * \brief Relay type inference and checking.
  *
@@ -653,7 +652,7 @@ class TypeInferencer::Resolver : public ExprMutator, PatternMutator {
   }
 
   Expr VisitExpr_(const ConstructorNode* op) final {
-    return GetRef<Constructor>(op);
+    return AttachCheckedType(op);
   }
 
   Expr VisitExpr_(const MatchNode* op) final {
