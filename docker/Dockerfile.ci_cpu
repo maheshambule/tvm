@@ -65,7 +65,6 @@ RUN bash /install/ubuntu_install_java.sh
 COPY install/ubuntu_install_antlr.sh /install/ubuntu_install_antlr.sh
 RUN bash /install/ubuntu_install_antlr.sh
 
-
 # Chisel deps for TSIM
 COPY install/ubuntu_install_chisel.sh /install/ubuntu_install_chisel.sh
 RUN bash /install/ubuntu_install_chisel.sh
