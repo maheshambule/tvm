@@ -29,7 +29,6 @@ rm -rf python/tvm/*.pyc python/tvm/*/*.pyc python/tvm/*/*/*.pyc
 # Test TVM
 make cython3
 
-
 # Test extern package
 cd apps/extension
 rm -rf lib
