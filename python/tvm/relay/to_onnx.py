@@ -332,8 +332,8 @@ class RelayToONNXConverter(object):
     def _add_params(self, node_entry, idx):
         """Add param value to initializer and name to inputs"""
         param_name = node_entry['name']
-        assert param_name in self._params, "The parameter {0} is not present" \
-                                           "in params dict provided.".format(param_name)
+        assert param_name not in self._params, "The parameter {0} is not present" \
+                                               "in params dict provided.".format(param_name)
         value = self._params[param_name]
         numpy_array = value.asnumpy()
         tensor = numpy_helper.from_array(numpy_array, param_name)
