@@ -316,7 +316,7 @@ class RelayToONNXConverter(object):
         """Convert Relay operator node to ONNX opeartor and add it to container nodes list"""
         if node_entry['op'] not in relay_to_onnx_op_mapping:
             raise NotImplementedError("Currently the operator '{0}' is "
-                                       "not supported.".format(node_entry['op']))
+                                      "not supported.".format(node_entry['op']))
 
         converter = relay_to_onnx_op_mapping[node_entry['op']]()
         node_entry['output_names'] = [self._tuple_to_name([idx, 0, 0])]
@@ -332,6 +332,8 @@ class RelayToONNXConverter(object):
     def _add_params(self, node_entry, idx):
         """Add param value to initializer and name to inputs"""
         param_name = node_entry['name']
+        assert param_name in self._params, "The parameter {0} is not present" \
+                                           "in params dict provided.".format(param_name)
         value = self._params[param_name]
         numpy_array = value.asnumpy()
         tensor = numpy_helper.from_array(numpy_array, param_name)

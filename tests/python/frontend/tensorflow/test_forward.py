@@ -38,8 +38,6 @@ import tvm
 from tvm import relay
 import tvm.relay.testing.tf as tf_testing
 
-import tensorflow_estimator
-
 #######################################################################
 # Generic run functions for TVM & tensorflow
 # ------------------------------------------
