@@ -24,7 +24,7 @@ from onnx import numpy_helper
 from tvm.autotvm.graph_tuner.utils.traverse_graph import _expr2graph_impl
 from tvm.relay.expr import Call, TupleGetItem, Var, Constant, Tuple
 
-ops = set()
+
 def relay_layout_to_storage_order(storage_order):
     """converter of tvm storage order format parameter to onnx storage order"""
     if storage_order not in ('NCHW', 'NHWC'):
@@ -154,7 +154,6 @@ class BatchNormalization(OpConverter):
     def convert_attributes(cls, attrs):
         return {
             'epsilon': float(attrs.get_str('epsilon')),
-            'momentum': float('0.8999999761581421'),
             # 'spatial' : 1 #TODO - version based support
             }
 
@@ -305,8 +304,8 @@ class RelayToONNXConverter(object):
             if idx == len(self._node_list) - 1:
                 self._add_output(self._node_list[out_idx], out_idx)
 
-        polished_model = self._mc.make_model()
-        #polished_model = onnx.utils.polish_model(model)
+        model = self._mc.make_model()
+        polished_model = onnx.utils.polish_model(model)
         return polished_model
 
     def _tuple_to_name(self, input):
@@ -316,10 +315,8 @@ class RelayToONNXConverter(object):
     def _add_node(self, node_entry, idx):
         """Convert Relay operator node to ONNX opeartor and add it to container nodes list"""
         if node_entry['op'] not in relay_to_onnx_op_mapping:
-            ops.add(node_entry['op'])
-            return
-            # raise NotImplementedError("Currently the operator '{0}' is "
-            #                           "not supported.".format(node_entry['op']))
+            raise NotImplementedError("Currently the operator '{0}' is "
+                                       "not supported.".format(node_entry['op']))
 
         converter = relay_to_onnx_op_mapping[node_entry['op']]()
         node_entry['output_names'] = [self._tuple_to_name([idx, 0, 0])]
@@ -329,12 +326,6 @@ class RelayToONNXConverter(object):
                 node_entry['input_names'].append(self._node_list[input_idx_tuple[0]]['name'])
             else:
                 node_entry['input_names'].append(self._tuple_to_name(input_idx_tuple))
-
-
-        # intermediate_tensor_name = self._tuple_to_name([idx, 0, 0])
-        # intermediate_layer_value_info = onnx.helper.ValueInfoProto()
-        # intermediate_layer_value_info.name = intermediate_tensor_name
-        # self._mc.add_outputs([intermediate_layer_value_info])
 
         converter.convert(node_entry, self._mc, self._node_list)
 
@@ -385,13 +376,8 @@ class RelayToONNXConverter(object):
         self._mc.add_outputs([output])
 
 
-
-
-
-
-def to_onnx(relay_module, params, name, path):
+def to_onnx(relay_module, params, name, path=None):
     """Converts a Relay Function Module into an equivalent ONNX and serialises it to the path
-
 
     Parameters
     ----------
@@ -416,7 +402,6 @@ def to_onnx(relay_module, params, name, path):
     converter = RelayToONNXConverter(name, node_list, params)
     onnx_model = converter.convert_to_onnx()
 
-    print(ops)
     if path:
         onnx.save(onnx_model, path)
     return onnx_model

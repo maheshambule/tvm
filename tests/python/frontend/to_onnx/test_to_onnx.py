@@ -160,7 +160,7 @@ def test_transpose():
         func = relay.Function([x], z)
         x_data = np.random.uniform(low=-1, high=1, size=shape).astype("float32")
         relay_res = do_relay_inference(func, (x_data,))
-        onnx_res = do_onnx_inference(func_to_onnx(func, 'test_reshape'), [x_data])
+        onnx_res = do_onnx_inference(func_to_onnx(func, 'test_transpose'), [x_data])
         tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
 
     verify_reshape((1, 2, 3, 4), (0, 2, 3, 1))
@@ -175,7 +175,7 @@ def test_dense():
         x_data = np.random.uniform(size=d_shape).astype("float32")
         w_data = np.random.uniform(size=w_shape).astype("float32")
         relay_res = do_relay_inference(func, (x_data,w_data))
-        onnx_res = do_onnx_inference(func_to_onnx(func, 'test_reshape'), [x_data, w_data])
+        onnx_res = do_onnx_inference(func_to_onnx(func, 'test_dense'), [x_data, w_data])
         tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
 
     verify_dense((1, 8), (16, 8))
@@ -191,7 +191,7 @@ def test_max_pool():
         func = relay.Function([x], y)
         x_data = np.random.uniform(size=x_shape).astype("float32")
         relay_res = do_relay_inference(func, (x_data,))
-        onnx_res = do_onnx_inference(func_to_onnx(func, 'test_reshape'), [x_data])
+        onnx_res = do_onnx_inference(func_to_onnx(func, 'test_max_pool'), [x_data])
         tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
 
     verify_max_pool((1, 4, 16, 16), pool_size=(2, 2), strides=(2, 2), padding=(0, 0), ceil_mode=False)
@@ -203,7 +203,7 @@ def test_batch_flatten():
         func = relay.Function([data], relay.nn.batch_flatten(data))
         x_data = np.random.uniform(size=d_shape).astype("float32")
         relay_res = do_relay_inference(func, (x_data,))
-        onnx_res = do_onnx_inference(func_to_onnx(func, 'test_reshape'), [x_data])
+        onnx_res = do_onnx_inference(func_to_onnx(func, 'test_batch_flatten'), [x_data])
         tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
 
     verify_test_batch_flatten((1, 2, 3, 4))
@@ -219,7 +219,7 @@ def test_bias_add():
         x_data = np.random.uniform(size=(1, 16)).astype("float32")
         bias = np.random.uniform(size=(16,)).astype("float32")
         relay_res = do_relay_inference(func, (x_data,bias))
-        onnx_res = do_onnx_inference(func_to_onnx(func, 'test_reshape'), [x_data, bias])
+        onnx_res = do_onnx_inference(func_to_onnx(func, 'test_bias_add'), [x_data, bias])
         tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
 
     verify_bias_add()
@@ -243,7 +243,7 @@ def test_batch_norm():
             moving_var = np.random.uniform(size=(2,)).astype(dtype)
 
             relay_res = do_relay_inference(func, (x_data, gamma, beta, moving_mean, moving_var))
-            onnx_res = do_onnx_inference(func_to_onnx(func, 'test_reshape'), [x_data, gamma,beta, moving_mean, moving_var])
+            onnx_res = do_onnx_inference(func_to_onnx(func, 'test_batch_norm'), [x_data, gamma,beta, moving_mean, moving_var])
             tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
 
     verify_batch_norm()
