@@ -314,11 +314,14 @@ class RelayToONNXConverter(object):
 
     def _add_node(self, node_entry, idx):
         """Convert Relay operator node to ONNX opeartor and add it to container nodes list"""
-        if node_entry['op'] not in relay_to_onnx_op_mapping:
+        if node_entry['op'] not in relay_to_onnx_op_mapping and not node_entry['op'].startswith('func_'):
             raise NotImplementedError("Currently the operator '{0}' is "
                                       "not supported.".format(node_entry['op']))
 
-        converter = relay_to_onnx_op_mapping[node_entry['op']]()
+        if not node_entry['op'].startswith('func_'):
+            converter = relay_to_onnx_op_mapping[node_entry['op']]()
+        else:
+            converter = OpConverter()
         node_entry['output_names'] = [self._tuple_to_name([idx, 0, 0])]
         node_entry['input_names'] = []
         for input_idx_tuple in node_entry['inputs']:
