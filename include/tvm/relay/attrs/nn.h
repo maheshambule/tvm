@@ -193,6 +193,47 @@ struct Conv2DWinogradNNPACKWeightTransformAttrs
   }
 };
 
+
+/*! \brief Attributes used in dilation operators */
+struct Dilation2DAttrs : public tvm::AttrsNode<Dilation2DAttrs> {
+  Array<IndexExpr> strides;
+  Array<IndexExpr> padding;
+  Array<IndexExpr> rates;
+  std::string data_layout;
+  std::string kernel_layout;
+  std::string out_layout;
+  DataType out_dtype;
+
+  TVM_DECLARE_ATTRS(Dilation2DAttrs, "relay.attrs.Dilation2DAttrs") {
+    TVM_ATTR_FIELD(strides).set_default(Array<IndexExpr>({1, 1}))
+        .describe("Specifies the strides of the convolution.");
+    TVM_ATTR_FIELD(padding).set_default(Array<IndexExpr>({0, 0}))
+        .describe("If padding is non-zero, then the input is implicitly zero-padded"
+                  "on both sides for padding number of points");
+    TVM_ATTR_FIELD(rates).set_default(Array<IndexExpr>({1, 1}))
+        .describe("Specifies the dilation rate to use for dilated convolution.");
+    TVM_ATTR_FIELD(data_layout).set_default("NCHW")
+        .describe("Dimension ordering of input data. Can be 'NCHW', 'NHWC', etc."
+                  "'N', 'C', 'H', 'W' stands for batch, channel, height, and width"
+                  "dimensions respectively. Convolution is applied on the 'H' and"
+                  "'W' dimensions.");
+    TVM_ATTR_FIELD(kernel_layout).set_default("IHW")
+        .describe("Dimension ordering of weight. Can be 'IHW', 'IHW16o16i', etc."
+                  "'I', 'H', 'W' stands for num_filter, input_channel, height, and width"
+                  "dimensions respectively.");
+    TVM_ATTR_FIELD(out_layout).set_default("")
+        .describe("Dimension ordering of output. Can be 'NCHW', 'NHWC', etc."
+                  "'N', 'C', 'H', 'W' stands for batch, channel, height, and width"
+                  "dimensions respectively. Default to be same as input layout.");
+
+    // use 0 bits to indicate none.
+    TVM_ATTR_FIELD(out_dtype)
+        .set_default(NullValue<DataType>())
+        .describe("Output data type, set to explicit type under mixed precision setting");
+  }
+};
+
+
 /*! \brief Attributes used in softmax operators */
 struct SoftmaxAttrs : public tvm::AttrsNode<SoftmaxAttrs> {
   int axis;

@@ -7,6 +7,7 @@ from .deformable_conv2d import *
 from .depthwise_conv2d import *
 from .elemwise import *
 from .dilate import *
+from .dilation2d import *
 from .flatten import *
 from .dense import *
 from .mapping import *

@@ -873,5 +873,63 @@ TVM_REGISTER_API("relay.op.nn._make.deformable_conv2d")
 .set_body_typed(MakeDeformableConv2D);
 
 
+
+
+// relay.nn.dilation2d
+TVM_REGISTER_NODE_TYPE(Dilation2DAttrs);
+
+
+
+// Positional relay function to create dilation2d operator
+// used by frontend FFI.
+Expr MakeDilation2D(Expr data,
+                Expr weight,
+                Array<IndexExpr> strides,
+                Array<IndexExpr> padding,
+                Array<IndexExpr> rates,
+                std::string data_layout,
+                std::string kernel_layout,
+                std::string out_layout,
+                DataType out_dtype) {
+  auto attrs = make_node<Dilation2DAttrs>();
+  attrs->strides = std::move(strides);
+  attrs->padding = std::move(padding);
+  attrs->rates = std::move(rates);
+  attrs->data_layout = std::move(data_layout);
+  attrs->kernel_layout = std::move(kernel_layout);
+  attrs->out_layout = std::move(out_layout);
+  attrs->out_dtype = std::move(out_dtype);
+  static const Op& op = Op::Get("nn.dilation2d");
+  return CallNode::make(op, {data, weight}, Attrs(attrs), {});
+}
+
+
+TVM_REGISTER_API("relay.op.nn._make.dilation2d")
+.set_body_typed(MakeDilation2D);
+
+
+RELAY_REGISTER_OP("nn.dilation2d")
+.describe(R"code(2D convolution layer (e.g. spatial convolution over images).
+
+This layer creates a convolution kernel that is convolved
+with the layer input to produce a tensor of outputs.
+
+- **data**: This depends on the `layout` parameter. Input is 4D array of shape
+            (batch_size, in_channels, height, width) if `layout` is `NCHW`.
+- **weight**: (channels, in_channels, kernel_size[0], kernel_size[1])
+- **out**:  This depends on the `layout` parameter. Output is 4D array of shape
+            (batch_size, channels, out_height, out_width) if `layout` is `NCHW`.
+
+)code" TVM_ADD_FILELINE)
+.set_attrs_type<Dilation2DAttrs>()
+.set_num_inputs(2)
+.add_argument("data", "Tensor", "The input tensor.")
+.add_argument("weight", "Tensor", "The weight tensor.")
+.set_support_level(2)
+.add_type_rel("Dilation2D", Dilation2DRel<Dilation2DAttrs>);
+//.set_attr<FInferCorrectLayout>("FInferCorrectLayout", Conv2DInferCorrectLayout<Conv2DAttrs>);
+
+
+
 }  // namespace relay
 }  // namespace tvm

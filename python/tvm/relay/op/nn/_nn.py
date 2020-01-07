@@ -280,6 +280,41 @@ def schedule_conv2d_transpose(attrs, outs, target):
 
 reg.register_pattern("nn.conv2d_transpose", OpPattern.OUT_ELEMWISE_FUSABLE)
 
+
+@reg.register_compute("nn.dilation2d")
+def compute_dilation2d(attrs, inputs, out_type, target):
+    """Compute definition of dilation2d"""
+    padding = get_const_tuple(attrs.padding)
+    strides = get_const_tuple(attrs.strides)
+    rates = get_const_tuple(attrs.rates)
+    layout = attrs.data_layout
+    kernel_layout = attrs.kernel_layout
+    out_dtype = attrs.out_dtype
+    out_dtype = (inputs[0].dtype if out_dtype in ("same", "")
+                 else out_dtype)
+
+    assert layout in ["NCHW", "NHWC", "NCHW4c", "HWCN"]
+    (dilation_h, dilation_w) = rates
+    if dilation_h < 1 or dilation_w < 1:
+        raise ValueError("dilation should be positive value")
+
+
+    out = topi.nn.dilation2d(
+        inputs[0], inputs[1], strides, padding,
+        rates, layout, out_dtype)
+
+    return [out]
+
+
+@reg.register_schedule("nn.dilation2d")
+def schedule_dilation2d(attrs, outs, target):
+    """Schedule definition of dilation2d"""
+    return topi.generic.schedule_dilation2d(outs)
+
+
+reg.register_pattern("nn.dilation2d", OpPattern.OUT_ELEMWISE_FUSABLE)
+
+
 # bias_add
 reg.register_schedule("nn.bias_add", schedule_injective)
 reg.register_pattern("nn.bias_add", OpPattern.BROADCAST)

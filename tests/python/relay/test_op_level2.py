@@ -175,6 +175,96 @@ def test_conv2d_run():
     run_test_conv2d("float32", "float32", 1, dshape, kshape,
                     padding=(1, 1), channels=10, kernel_size=(3 ,3), dilation=(3, 3))
 
+def test_dilation_2d_run():
+    def run_test_conv2d(dtype, out_dtype, scale, dshape, kshape,
+                        padding=(1, 1),
+                        fref=None,
+                        groups=1,
+                        dilation=(1, 1),
+                        except_targets=None,
+                        data=None,
+                        kernel=None,
+                        **attrs):
+        if except_targets is None:
+            except_targets = []
+
+        x = relay.var("x", shape=dshape, dtype=dtype)
+        w = relay.var("w", shape=kshape, dtype=dtype)
+        y = relay.nn.dilation2d(x, w,
+                            padding=padding,
+                            rates=dilation,
+                            **attrs)
+        func = relay.Function([x, w], y)
+        if not data:
+            data = np.random.uniform(-scale, scale, size=dshape).astype(dtype)
+        if not kernel:
+            kernel = np.random.uniform(-scale, scale, size=kshape).astype(dtype)
+        # dkernel = topi.testing.dilate_python(kernel, (1, 1) + dilation)
+        # if fref is None:
+        #     ref_res = topi.testing.conv2d_nchw_python(
+        #         data.astype(out_dtype), dkernel.astype(out_dtype), 1, padding,
+        #         groups=groups)
+        # else:
+        #     ref_res = fref(data.astype(out_dtype), dkernel.astype(out_dtype))
+
+
+        for target, ctx in ctx_list():
+            if target in except_targets:
+                continue
+            intrp1 = relay.create_executor("graph", ctx=ctx, target=target)
+            op_res1 = intrp1.evaluate(func)(data, kernel)
+            print(op_res1.asnumpy())
+            #tvm.testing.assert_allclose(op_res1.asnumpy(), ref_res, rtol=1e-5, atol=1e-5)
+
+    # # normal conv2d
+    dshape = (1, 1, 2, 2)
+    kshape = (1, 2, 2)
+
+    # [1, 1, 2, 2]
+    image = [[[
+               [.2, .2],
+               [.3, 1.1]
+            ]]]
+    # [1, 2, 2]
+    kernel = [[
+               [.4, .3],
+               [.2, 1.1]
+            ]]
+    # [1, 1, 1, 1]
+
+    dshape = (1, 1, 2, 2)
+    kshape = (1, 2, 2)
+    #run_test_conv2d("float32", "float32", 1, dshape, kshape,
+    #                padding=(1,1), data=image, kernel=kernel)
+
+    image = [[[[.1, .2, .3],
+               [.4, .5, .6],
+               [.7, .8, .9]]]]
+    # [2, 2, 1]
+    kernel = [[[.4, .3],
+               [.1, .2]
+               ]]
+
+    dshape = (1, 1, 3, 3)
+    kshape = (1, 2, 2)
+    run_test_conv2d("float32", "float32", 1, dshape, kshape,
+                    padding=(0,0), dilation=(2,2), data=image, kernel=kernel)
+
+
+    # # mixed precision
+    # run_test_conv2d("int8", "int32", 1, dshape, kshape,
+    #                 padding=(1, 1))
+    # kshape = (3, 1, 3)
+    # # mixed precision.
+    # run_test_conv2d("int8", "int32", 1, dshape, kshape,
+    #                 padding=(0, 1))
+    # # dilated conv2d
+    # dshape = (1, 3, 18, 18)
+    # kshape = (3, 3, 3)
+    # run_test_conv2d("float32", "float32", 1, dshape, kshape,
+    #                 padding=(1, 1))
+
+
 def test_conv2d_winograd():
     class WinogradFallback(autotvm.FallbackContext):
         def _query_inside(self, target, workload):
@@ -760,21 +850,22 @@ def test_bitpack_infer_type():
 
 
 if __name__ == "__main__":
-    test_pool2d()
-    test_avg_pool2d_no_count_pad()
-    test_lrn()
-    test_l2_normalize()
-    test_conv2d_infer_type()
-    test_bitpack_infer_type()
-    test_upsampling_infer_type()
-    test_flatten_infer_type()
-    test_pad_infer_type()
-    test_pad_run()
-    test_conv2d_transpose_infer_type()
-    test_conv2d_transpose_run()
-    test_conv2d_run()
-    test_conv2d_winograd()
-    test_bitserial_conv2d_infer_type()
-    test_batch_flatten()
-    test_upsampling()
-    test_conv2d_int8_intrinsics()
+    # test_pool2d()
+    # test_avg_pool2d_no_count_pad()
+    # test_lrn()
+    # test_l2_normalize()
+    # test_conv2d_infer_type()
+    # test_bitpack_infer_type()
+    # test_upsampling_infer_type()
+    # test_flatten_infer_type()
+    # test_pad_infer_type()
+    # test_pad_run()
+    # test_conv2d_transpose_infer_type()
+    # test_conv2d_transpose_run()
+    # test_conv2d_run()
+    # test_conv2d_winograd()
+    # test_bitserial_conv2d_infer_type()
+    # test_batch_flatten()
+    # test_upsampling()
+    # test_conv2d_int8_intrinsics()
+    test_dilation_2d_run()
