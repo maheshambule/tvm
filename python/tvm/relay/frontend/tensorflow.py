@@ -197,10 +197,24 @@ def _conv(opname):
         attr['data_format'] = attr['data_format'].decode("utf-8")
         flip_layout = False
 
+        if opname == 'conv_transpose' and attr['data_format'] == 'NHWC':
+            # transform to NCHW for TVM backend compatible and set 'flip_layout'
+            # to have output flip back to NHWC
+            tmp_shape = attr['_input_shapes'][inputs[2]]
+            tmp_shape = [tmp_shape[ii] for ii in (0, 3, 1, 2)]
+            inputs[2] = _op.transpose(inputs[2], axes=(0, 3, 1, 2))
+            attr['_input_shapes'][inputs[2]] = tmp_shape
+            attr['strides'][1], attr['strides'][2], attr['strides'][3] = \
+                attr['strides'][3], attr['strides'][1], attr['strides'][2]
+            attr['data_format'] = 'NCHW'
+            flip_layout = True
+
+        inputs_data = inputs[0] if opname != 'conv_transpose' else inputs[2]
+
         # NCHW Layout require weights transpose
         if attr['data_format'] == 'NCHW':
             tmp_shape = attr['_input_shapes'][inputs[1]]
-            if opname == 'conv':
+            if opname in ['conv', 'conv_transpose']:
                 tmp_shape = [tmp_shape[ii] for ii in (3, 2, 0, 1)]
                 inputs[1] = _op.transpose(inputs[1], axes=(3, 2, 0, 1))
             else:
@@ -208,13 +222,13 @@ def _conv(opname):
                 inputs[1] = _op.transpose(inputs[1], axes=(2, 3, 0, 1))
             attr['_input_shapes'][inputs[1]] = tmp_shape
 
-        input_shape = attr['_input_shapes'][inputs[0]]
+        input_shape = attr['_input_shapes'][inputs_data]
         weights_shape = attr['_input_shapes'][inputs[1]]
 
         if attr['_target_layout'] == "NCHW" and attr['data_format'] == "NHWC":
             input_shape = [input_shape[ii] for ii in (0, 3, 1, 2)]
-            inputs[0] = _op.transpose(inputs[0], axes=(0, 3, 1, 2))
-            if opname == 'conv':
+            inputs_data = _op.transpose(inputs_data, axes=(0, 3, 1, 2))
+            if opname in ['conv', 'conv_transpose']:
                 weights_shape = [weights_shape[ii] for ii in (3, 2, 0, 1)]
                 inputs[1] = _op.transpose(inputs[1], axes=(3, 2, 0, 1))
             else:
@@ -230,6 +244,8 @@ def _conv(opname):
             attr['kernel_shape'] = (weights_shape[0], weights_shape[1])
             if opname == 'conv':
                 attr['channels'] = weights_shape[3]
+            elif opname == 'conv_transpose':
+                attr['channels'] = weights_shape[2]
             else:
                 attr['channels'] = input_shape[3] * depth_mult
 
@@ -241,6 +257,8 @@ def _conv(opname):
             attr['kernel_shape'] = (weights_shape[2], weights_shape[3])
             if opname == 'conv':
                 attr['channels'] = weights_shape[0]
+            elif opname == 'conv_transpose':
+                attr['channels'] = weights_shape[1]
             else:
                 attr['channels'] = input_shape[1] * depth_mult
                 if attr['channels'] < 0:
@@ -281,17 +299,17 @@ def _conv(opname):
 
 
             if attr['data_format'] == 'NHWC':
-                inputs[0] = _op.nn.pad(data=inputs[0],
-                                       pad_width=((0, 0),
-                                                  (pad_v[0], pad_v[1]),
-                                                  (pad_h[0], pad_h[1]),
-                                                  (0, 0)))
+                inputs_data = _op.nn.pad(data=inputs_data,
+                                         pad_width=((0, 0),
+                                                    (pad_v[0], pad_v[1]),
+                                                    (pad_h[0], pad_h[1]),
+                                                    (0, 0)))
             else:
-                inputs[0] = _op.nn.pad(data=inputs[0],
-                                       pad_width=((0, 0),
-                                                  (0, 0),
-                                                  (pad_v[0], pad_v[1]),
-                                                  (pad_h[0], pad_h[1])))
+                inputs_data = _op.nn.pad(data=inputs_data,
+                                         pad_width=((0, 0),
+                                                    (0, 0),
+                                                    (pad_v[0], pad_v[1]),
+                                                    (pad_h[0], pad_h[1])))
 
             attr['padding'] = [0, 0]
 
@@ -301,27 +319,30 @@ def _conv(opname):
             raise tvm.error.OpAttributeInvalid(msg.format(attr['padding']))
 
         if 'kernel_layout' not in attr:
-            if opname == 'conv':
+            if opname in ['conv', 'conv_transpose']:
                 attr['kernel_layout'] = 'HWIO' if attr['data_format'] == 'NHWC' else 'OIHW'
             else:
                 attr['kernel_layout'] = 'HWOI' if attr['data_format'] == 'NHWC' else 'OIHW'
 
-        use_bias = len(inputs) == 3
+        use_bias = len(inputs) == (3 if opname != 'conv_transpose' else 4)
         channel_axis = 1 if attr['data_format'] == "NCHW" else 3
 
         # Ignore the new attributes from TF2.0, for now.
         out = AttrCvt(
-            op_name=_dimension_picker('conv'),
+            op_name=_dimension_picker('conv', \
+                surfix="_transpose" if opname == 'conv_transpose' else ""),
             ignores=['explicit_paddings'],
             transforms={
                 'kernel_shape': 'kernel_size',
                 'data_format': 'data_layout',
                 'dilations': ('dilation', (0, 0)),
                 'group': ('groups', 1)},
-            custom_check=_dimension_constraint())([inputs[0], inputs[1]], attr)
+            custom_check=_dimension_constraint())([inputs_data, inputs[1]], attr)
 
         if use_bias:
-            out = _op.nn.bias_add(out, inputs[2], axis=channel_axis)
+            out = _op.nn.bias_add(out,
+                                  inputs[2] if opname != 'conv_transpose' else inputs[3],
+                                  axis=channel_axis)
 
         if flip_layout:
             out = _op.transpose(out, axes=(0, 2, 3, 1))
@@ -511,9 +532,11 @@ def _expand_dims():
                        extras={'axis': int(axis), 'num_newaxis': 1})(inputs, attr)
     return _impl
 
-def _resize_bilinear():
+def _resize(method):
     def _impl(inputs, attr, params):
-        size = attr['_output_shapes'][0][1:3]
+        output_shape0 = attr['_output_shapes'][0]
+        # Dynamic size models might have _output_shapes attr equal to [None] here
+        size = output_shape0[1:3] if output_shape0 is not None else [-1, -1]
         # Important that the size is defined. If an axis is not, we need to infer what
         # the shape should be.
         if -1 in size:
@@ -524,24 +547,9 @@ def _resize_bilinear():
         attr['layout'] = 'NHWC'
 
         # Ignore the new attributes from TF2.0, for now.
-        return AttrCvt(op_name="resize",
+        return AttrCvt(op_name='resize',
                        ignores=['Tdim', 'half_pixel_centers'],
-                       extras={'method': "bilinear"})(inputs, attr)
-    return _impl
-
-def _resize_nearest_neighbor():
-    def _impl(inputs, attr, params):
-        size = attr['_output_shapes'][0][1:3]
-        if -1 in size:
-            size = _infer_value(inputs[1], params).asnumpy().reshape([-1]).tolist()
-        attr['size'] = size
-        inputs.pop(1)
-        # NHWC
-        attr['layout'] = 'NHWC'
-
-        return AttrCvt(op_name="resize",
-                       ignores=['Tdim'],
-                       extras={'method': "nearest_neighbor"})(inputs, attr)
+                       extras={'method': method})(inputs, attr)
     return _impl
 
 def _check_numerics():
@@ -721,8 +729,14 @@ def _tile():
 
 def _slice():
     def _impl(inputs, attr, params):
-        begin = _get_list_param(params, inputs[1])
-        size = _get_list_param(params, inputs[2])
+        try:
+            begin = _get_list_param(params, inputs[1])
+        except (IndexError, KeyError, AttributeError):
+            begin = _infer_value(inputs[1], params).asnumpy().tolist()[0]
+        try:
+            size = _get_list_param(params, inputs[2])
+        except (IndexError, KeyError, AttributeError):
+            size = _infer_value(inputs[2], params).asnumpy().tolist()[0]
         data_shape = attr['_input_shapes'][inputs[0]]
         data_dim = len(data_shape)
         end = size
@@ -1155,8 +1169,8 @@ def _transpose():
         # otherwise its value is get from params
         try:
             axes = _get_list_param(params, inputs[1])
-        except (IndexError, KeyError):
-            axes = None
+        except (IndexError, KeyError, AttributeError):
+            axes = _infer_value_simulated(inputs[1], params).asnumpy()
         return _op.transpose(inputs[0], axes=axes)
     return _impl
 
@@ -1338,8 +1352,13 @@ def _topk():
 def _floordiv():
     def _impl(inputs, attr, params):
         assert len(inputs) == 2
-        div = AttrCvt('divide')(inputs, attr)
-        return get_relay_op('floor')(div)
+        return AttrCvt('floor_divide')(inputs, attr)
+    return _impl
+
+def _floormod():
+    def _impl(inputs, attr, params):
+        assert len(inputs) == 2
+        return AttrCvt('floor_mod')(inputs, attr)
     return _impl
 
 def _logical(name):
@@ -1519,6 +1538,7 @@ _convert_map = {
     'Concat'                            : _concat(),
     'ConcatV2'                          : _concatV2(),
     'Conv2D'                            : _conv('conv'),
+    'Conv2DBackpropInput'               : _conv('conv_transpose'),
     'CropAndResize'                     : _crop_and_resize(),
     'DecodeJpeg'                        : _decode_image(),
     'DepthwiseConv2dNative'             : _conv('depthwise'),
@@ -1532,6 +1552,7 @@ _convert_map = {
     'Fill'                              : _fill(),
     'Floor'                             : AttrCvt('floor'),
     'FloorDiv'                          : _floordiv(),
+    'FloorMod'                          : _floormod(),
     'FusedBatchNorm'                    : _fused_batch_norm(),
     'FusedBatchNormV2'                  : _fused_batch_norm(),
     'Gather'                            : _gather(),
@@ -1586,9 +1607,9 @@ _convert_map = {
     'Relu'                              : AttrCvt('relu'),
     'Relu6'                             : _relu6(),
     'Reshape'                           : _reshape(),
-    'ResizeBilinear'                    : _resize_bilinear(),
-    'ResizeBicubic'                     : _resize_bilinear(),
-    'ResizeNearestNeighbor'             : _resize_nearest_neighbor(),
+    'ResizeBilinear'                    : _resize('bilinear'),
+    'ResizeBicubic'                     : _resize('bilinear'),
+    'ResizeNearestNeighbor'             : _resize('nearest_neighbor'),
     'ReverseV2'                         : _reverse_v2(),
     'RightShift'                        : AttrCvt('right_shift'),
     'Round'                             : AttrCvt('round'),

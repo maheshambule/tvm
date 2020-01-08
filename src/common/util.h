@@ -18,7 +18,6 @@
  */
 
 /*!
- *  Copyright (c) 2019 by Contributors
  * \file util.h
  * \brief Defines some common utility function..
  */
@@ -35,6 +34,7 @@
 #include <sstream>
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <memory>
 
 namespace tvm {

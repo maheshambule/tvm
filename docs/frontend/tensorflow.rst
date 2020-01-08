@@ -150,6 +150,7 @@ Supported Ops
 - Fill
 - Floor
 - FloorDiv
+- FloorMod
 - FusedBatchNorm
 - FusedBatchNormV2
 - Gather

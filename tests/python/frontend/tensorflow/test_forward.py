@@ -28,7 +28,6 @@ from tensorflow.python.framework import graph_util
 from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import gen_array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
@@ -295,7 +294,8 @@ def test_forward_pooling():
 
 
 def _test_convolution(opname, tensor_in_sizes, filter_in_sizes,
-                      dilations, strides, padding, data_format):
+                      dilations, strides, padding, data_format,
+                      deconv_output_shape=[]):
     """ One iteration of convolution with given shapes and attributes """
 
     total_size_1 = np.prod(tensor_in_sizes)
@@ -326,6 +326,16 @@ def _test_convolution(opname, tensor_in_sizes, filter_in_sizes,
 
             compare_tf_with_tvm(np.reshape(data_array, tensor_in_sizes).astype('float32'),
                                 'Placeholder:0', 'Conv2D:0')
+        elif opname == 'conv_transpose':
+            nn_ops.conv2d_transpose(in_data,
+                                    in_filter,
+                                    output_shape=deconv_output_shape,
+                                    strides=strides,
+                                    padding=padding,
+                                    data_format=data_format)
+
+            compare_tf_with_tvm(np.reshape(data_array, tensor_in_sizes).astype('float32'),
+                                'Placeholder:0', 'conv2d_transpose:0')
         else:
             nn_ops.depthwise_conv2d_native(in_data,
                                            in_filter,
@@ -349,6 +359,22 @@ def test_forward_convolution():
         _test_convolution('depthwise', [4, 124, 17, 17], [1, 1, 124, 1], [1, 1], [1, 1], 'SAME', 'NCHW')
         _test_convolution('depthwise', [4, 12, 17, 17], [3, 3, 12, 1], [1, 1], [2, 2], 'VALID', 'NCHW')
         _test_convolution('depthwise', [4, 12, 17, 17], [3, 3, 12, 2], [1, 1], [2, 2], 'VALID', 'NCHW')
+        _test_convolution('conv_transpose', [4, 32, 8, 8], [1, 1, 176, 32], [1, 1], [1, 1], 'SAME',
+                          'NCHW', [4, 176, 8, 8])
+        _test_convolution('conv_transpose', [4, 19, 8, 8], [3, 3, 19, 19], [1, 1], [2, 2], 'VALID',
+                          'NCHW', [4, 19, 17, 17])
+        _test_convolution('conv_transpose', [4, 19, 17, 17], [1, 1, 124, 19], [1, 1], [1, 1], 'SAME',
+                          'NCHW', [4, 124, 17, 17])
+        _test_convolution('conv_transpose', [4, 32, 8, 8], [3, 3, 12, 32], [1, 1], [2, 2], 'VALID',
+                          'NCHW', [4, 12, 17, 17])
+        # kernel 2x2, strides (2,2)
+        _test_convolution('conv_transpose', [4, 19, 8, 8], [2, 2, 19, 19], [1, 1], [2, 2], 'VALID',
+                          'NCHW', [4, 19, 16, 16])
+        _test_convolution('conv_transpose', [4, 32, 8, 8], [2, 2, 12, 32], [1, 1], [2, 2], 'VALID',
+                          'NCHW', [4, 12, 16, 16])
+        # output channel is 1
+        _test_convolution('conv_transpose', [1, 19, 8, 8], [1, 1, 1, 19], [1, 1], [1, 1], 'VALID',
+                          'NCHW', [1, 1, 8, 8])
 
     _test_convolution('conv', [4, 8, 8, 176], [1, 1, 176, 32], [1, 1], [1, 1], 'SAME', 'NHWC')
     _test_convolution('conv', [4, 17, 17, 19], [3, 3, 19, 19], [1, 1], [2, 2], 'VALID', 'NHWC')
@@ -359,6 +385,23 @@ def test_forward_convolution():
     _test_convolution('depthwise', [4, 17, 17, 124], [1, 1, 124, 1], [1, 1], [1, 1], 'SAME', 'NHWC')
     _test_convolution('depthwise', [4, 17, 17, 12], [3, 3, 12, 1], [1, 1], [2, 2], 'VALID', 'NHWC')
     _test_convolution('depthwise', [4, 17, 17, 12], [3, 3, 12, 2], [1, 1], [2, 2], 'VALID', 'NHWC')
+    _test_convolution('conv_transpose', [4, 8, 8, 32], [1, 1, 176, 32], [1, 1], [1, 1], 'SAME',
+                      'NHWC', [4, 8, 8, 176])
+    _test_convolution('conv_transpose', [4, 8, 8, 19], [3, 3, 19, 19], [1, 1], [2, 2], 'VALID',
+                      'NHWC', [4, 17, 17, 19])
+    _test_convolution('conv_transpose', [4, 17, 17, 19], [1, 1, 124, 19], [1, 1], [1, 1], 'SAME',
+                      'NHWC', [4, 17, 17, 124])
+    _test_convolution('conv_transpose', [4, 8, 8, 32], [3, 3, 12, 32], [1, 1], [2, 2], 'VALID',
+                      'NHWC', [4, 17, 17, 12])
+    # kernel 2x2, strides (2,2)
+    _test_convolution('conv_transpose', [4, 8, 8, 19], [2, 2, 19, 19], [1, 1], [2, 2], 'VALID',
+                      'NHWC', [4, 16, 16, 19])
+    _test_convolution('conv_transpose', [4, 8, 8, 32], [2, 2, 12, 32], [1, 1], [2, 2], 'VALID',
+                      'NHWC', [4, 16, 16, 12])
+    # output channel is 1
+    _test_convolution('conv_transpose', [1, 8, 8, 19], [1, 1, 1, 19], [1, 1], [1, 1], 'VALID',
+                      'NHWC', [1, 8, 8, 1])
+
 
 #######################################################################
 # BiasAdd
@@ -1041,8 +1084,6 @@ def test_forward_stridedslice():
 #######################################################################
 # FloorDiv, RealDiv
 # -----------------
-
-
 def _test_forward_divide(ip_shape, dtype):
     np_numer = np.random.uniform(-100, 100, size=ip_shape).astype(dtype)
     np_denomin = np.random.uniform(1, 100, size=ip_shape).astype(dtype)
@@ -1055,7 +1096,7 @@ def _test_forward_divide(ip_shape, dtype):
 
 
 def _test_forward_floordiv(ip_shape, dtype):
-    np_numer = np.random.uniform(-100, 100, size=ip_shape).astype(dtype)
+    np_numer = np.random.uniform(1, 100, size=ip_shape).astype(dtype)
     tf.reset_default_graph()
     numerator = tf.placeholder(dtype, ip_shape, name="numer")
     tf.math.floordiv(numerator, tf.constant(5, dtype=dtype), name='FloorDiv')
@@ -1067,6 +1108,26 @@ def test_forward_divide():
     _test_forward_divide((4,), 'int32')
     _test_forward_divide((4, 3, 7), 'float32')
     _test_forward_floordiv((4, 3, 7), 'float32')
+    _test_forward_floordiv((4, 3, 7), 'int32')
+
+#######################################################################
+# FloorMod
+# --------
+def _test_forward_floormod(in_shape, if_shape, dtype):
+    np_numer = np.random.uniform(1, 100, size=in_shape).astype(dtype)
+    np_factor = np.random.uniform(1, 100, size=if_shape).astype(dtype)
+    tf.reset_default_graph()
+    numerator = tf.placeholder(dtype, in_shape, name="numer")
+    factor = tf.placeholder(dtype, if_shape, name="factor")
+    tf.floormod(numerator, factor, name='FloorMod')
+    compare_tf_with_tvm([np_numer, np_factor], ['numer:0', 'factor:0'], 'FloorMod:0')
+
+def test_forward_floormod():
+    '''test FloorMod'''
+    _test_forward_floormod((10,), (10,), 'float32')
+    _test_forward_floormod((8, 2), (1,), 'float32')
+    _test_forward_floormod((4, 3, 7), (4, 3, 7), 'float32')
+    _test_forward_floormod((4, 3, 7), (4, 3, 7), 'int32')
 
 
 #######################################################################
@@ -1376,8 +1437,8 @@ def _test_resize_bilinear_from_tensor(in_shape, align_corners):
 
     with tf.Graph().as_default():
         in_data = array_ops.placeholder(
-            shape=[in_shape[0], in_shape[1], None, None], dtype=data.dtype)
-        to_shape = tf.shape(in_data)[2:]
+            shape=[in_shape[0], None, None, in_shape[3]], dtype=data.dtype)
+        to_shape = tf.shape(in_data)[1:3]
         tf.image.resize_bilinear(
             in_data, to_shape, align_corners=align_corners)
 
@@ -1400,14 +1461,29 @@ def _test_resize_nearest_neighbor(in_shape, to_shape):
         compare_tf_with_tvm(data, 'Placeholder:0', 'resize_nearest_neighbor:0')
 
 
+def _test_resize_nearest_neighbor_dynamic_shape(in_shape, scale):
+    """ One iteration of resize nearest neighbor for graph with dynamic input shape """
+
+    data = np.random.uniform(size=in_shape).astype('float32')
+    with tf.Graph().as_default():
+        in_data = array_ops.placeholder(shape=None, dtype=data.dtype)
+        # multiply input shape by scale factor
+        new_shape = tf.shape(in_data)[1:3] * tf.constant(scale, dtype=tf.int32)
+        tf.image.resize_nearest_neighbor(
+            in_data, new_shape, name='resize_nearest_neighbor')
+
+        compare_tf_with_tvm(data, 'Placeholder:0', 'resize_nearest_neighbor:0')
+
+
 def test_forward_resize():
     """ Resize Bilinear, Nearest_Neighbor """
-
-    _test_resize_bilinear((4, 16, 32, 32), [50, 50], False)
-    _test_resize_bilinear((6, 32, 64, 64), [20, 20], True)
-    _test_resize_bilinear_from_tensor((4, 16, 32, 32), False)
-    _test_resize_bilinear_from_tensor((6, 32, 50, 50), True)
-    _test_resize_nearest_neighbor((6, 32, 64, 64), [20, 20])
+    # TF default layout is NHWC
+    _test_resize_bilinear((4, 32, 32, 3), [50, 50], False)
+    _test_resize_bilinear((6, 32, 32, 3), [20, 20], True)
+    _test_resize_bilinear_from_tensor((4, 32, 32, 3), False)
+    _test_resize_bilinear_from_tensor((6, 50, 50, 3), True)
+    _test_resize_nearest_neighbor((6, 32, 32, 3), [20, 20])
+    _test_resize_nearest_neighbor_dynamic_shape((1, 16, 16, 3), scale=[2, 2])
 
 
 #######################################################################
@@ -2114,6 +2190,22 @@ def _test_forward_transpose(ishape, axes=None):
 
         compare_tf_with_tvm(data, 'transpose_data:0', 'transpose:0')
 
+def _test_forward_tranapose_axes_input(ishape, axes):
+    data = np.random.uniform(size=ishape).astype(np.float32)
+    axes_np = np.array(axes).astype(np.int32)
+
+    with tf.Graph().as_default():
+        in1 = tf.placeholder(
+            shape=data.shape, dtype=data.dtype, name="transpose_data")
+
+        const1 = tf.constant(axes_np, dtype=tf.int32)
+
+        # make axes an input to tf.transpose, but not an input to the graph,
+        # so it can be extracted with infer_value_simulated
+        axes = tf.reverse(const1, axis=[-1])
+        tf.transpose(in1, axes)
+
+        compare_tf_with_tvm([data], ['transpose_data:0'], 'transpose:0')
 
 def test_forward_transpose():
     _test_forward_transpose((2, 3, 4), (1, 2, 0))
@@ -2122,7 +2214,23 @@ def test_forward_transpose():
     _test_forward_transpose((2, 3, 4), (1, 2, 0))
     _test_forward_transpose((2, 3, 4), (0, 1, 2))
     _test_forward_transpose((2, 3, 4, 5), (3, 0, 1, 2))
+    _test_forward_tranapose_axes_input((2, 3, 4), (1, 2, 0))
+    _test_forward_tranapose_axes_input((2, 3, 4, 5), (3, 0, 1, 2))
 
+
+def _test_forward_slice_operation_input(input_value, begin_value, size_value):
+    input_data = np.array(input_value, dtype=np.float32)
+    with tf.Graph().as_default():
+        input_tensor = tf.placeholder(
+            shape=input_data.shape, dtype=input_data.dtype, name="input")
+        begin_tensor = tf.expand_dims(begin_value, axis=0)
+        size_tensor = tf.expand_dims(size_value, axis=0)
+        slice_tensor = tf.slice(input_tensor, begin_tensor, size_tensor, name='slice_output')
+        compare_tf_with_tvm([input_data], ['input:0'], 'slice_output:0')
+
+
+def test_forward_slice():
+    _test_forward_slice_operation_input([1, 1], 0, 2)
 
 def test_forward_ceil():
     ishape = (1, 3, 10, 10)
@@ -2735,6 +2843,7 @@ if __name__ == '__main__':
     test_forward_dilation()
 
     # Transforms
+    test_forward_slice()
     test_forward_transpose()
     test_forward_reshape()
     test_forward_depthtospace()
@@ -2784,6 +2893,7 @@ if __name__ == '__main__':
     test_forward_sin()
     test_forward_negative()
     test_forward_divide()
+    test_forward_floordiv()
     test_forward_abs()
     test_forward_softplus()
     test_forward_sqrt()
@@ -2797,6 +2907,7 @@ if __name__ == '__main__':
     test_forward_erf()
     test_forward_squared_difference()
     test_forward_add_n()
+    test_forward_floormod()
 
     # Reductions
     test_forward_argminmax()

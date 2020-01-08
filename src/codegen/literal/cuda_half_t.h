@@ -18,7 +18,6 @@
  */
 
 /*!
- *  Copyright (c) 2019 by Contributors
  * \file cuda_half_t.h
  * \brief half_t (fp16) definition for cuda codegen.
  */
@@ -28,6 +27,7 @@
 static constexpr const char* _cuda_half_t_def = R"(
 typedef unsigned short uint16_t;
 typedef unsigned char uint8_t;
+typedef signed char int8_t;
 typedef int int32_t;
 typedef unsigned long long uint64_t;
 typedef unsigned int uint32_t;
@@ -76,7 +76,7 @@ class TVM_ALIGNED(2) half {
   TVM_XINLINE explicit half(const uint8_t& value) { constructor(value); }
   TVM_XINLINE explicit half(const int32_t& value) { constructor(value); }
   TVM_XINLINE explicit half(const uint32_t& value) { constructor(value); }
-  TVM_XINLINE explicit half(const int64_t& value) { constructor(value); }
+  TVM_XINLINE explicit half(const long long& value) { constructor(value); }
   TVM_XINLINE explicit half(const uint64_t& value) { constructor(value); }
 
   TVM_XINLINE operator float() const {                          \
@@ -176,8 +176,10 @@ class TVM_ALIGNED(2) half {
       uint32_t vshift = 1 - exp16;
       uint32_t significand = fp32HiddenBit | (v.ui & fp32FractionMask);
       v.ui = significand >> vshift;
+      v.ui += (v.ui & 0x3fff) != 0x1000 || (significand & 0x7ff) ? 0x1000 : 0;
     } else if (v.si <= maxN) {
       // Handle norms
+      v.ui += (v.ui & 0x3fff) != 0x1000 ? 0x1000 : 0;
       v.ui -= expAdjust << fp32FractionBits;
     } else if (v.si <= infN) {
       v.si = infN;
@@ -211,8 +213,10 @@ class TVM_ALIGNED(2) half {
       uint32_t vshift = 1 - exp16;
       uint32_t significand = fp32HiddenBit | (v.ui & fp32FractionMask);
       v.ui = significand >> vshift;
+      v.ui += (v.ui & 0x3fff) != 0x1000 || (significand & 0x7ff) ? 0x1000 : 0;
     } else if (v.si <= maxN) {
       // Handle norms
+      v.ui += (v.ui & 0x3fff) != 0x1000 ? 0x1000 : 0;
       v.ui -= expAdjust << fp32FractionBits;
     } else if (v.si <= infN) {
       v.si = infN;
@@ -275,6 +279,10 @@ TVM_HALF_OPERATOR(bool, >)
 TVM_HALF_OPERATOR(bool, <)
 TVM_HALF_OPERATOR(bool, >=)
 TVM_HALF_OPERATOR(bool, <=)
+
+TVM_XINLINE half __float2half_rn(const float a) {
+  return half(a);
+}
 )";
 
 #endif  // TVM_CODEGEN_LITERAL_CUDA_HALF_T_H_

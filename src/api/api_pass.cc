@@ -18,8 +18,7 @@
  */
 
 /*!
- *  Copyright (c) 2017 by Contributors
- *  Exposre of pass functions.
+ *  Exposure of pass functions.
  * \file api_pass.cc
  */
 #include <tvm/expr.h>
