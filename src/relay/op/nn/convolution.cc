@@ -986,7 +986,7 @@ with the layer input to produce a tensor of outputs.
 
 - **data**: This depends on the `layout` parameter. Input is 4D array of shape
             (batch_size, in_channels, height, width) if `layout` is `NCHW`.
-- **weight**: (channels, in_channels, kernel_size[0], kernel_size[1])
+- **weight**: (in_channels, kernel_size[0], kernel_size[1])
 - **out**:  This depends on the `layout` parameter. Output is 4D array of shape
             (batch_size, channels, out_height, out_width) if `layout` is `NCHW`.
 
@@ -997,7 +997,8 @@ with the layer input to produce a tensor of outputs.
 .add_argument("weight", "Tensor", "The weight tensor.")
 .set_support_level(2)
 .add_type_rel("Dilation2D", Dilation2DRel<Dilation2DAttrs>)
-.set_attr<FInferCorrectLayout>("FInferCorrectLayout", Dilation2DInferCorrectLayout<Dilation2DAttrs>);
+.set_attr<FInferCorrectLayout>("FInferCorrectLayout",
+         Dilation2DInferCorrectLayout<Dilation2DAttrs>);
 
 
 

@@ -272,18 +272,18 @@ bool Dilation2DRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
 
   const auto trans_in_layout = BijectiveLayoutNode::make(in_layout, kNCHW);
   CHECK(trans_in_layout.defined())
-      << "Conv only support input layouts that are convertible from NCHW."
+      << "Dilation2D only support input layouts that are convertible from NCHW."
       << " But got " << in_layout;
 
   const auto trans_kernel_layout = BijectiveLayoutNode::make(kernel_layout, kOIHW);
   CHECK(trans_kernel_layout.defined())
-      << "Conv only support kernel layouts that are convertible from OIHW."
+      << "Dilation2D only support kernel layouts that are convertible from OIHW."
       << " But got " << kernel_layout;
 
   Layout out_layout(param->out_layout == "" ? param->data_layout : param->out_layout);
   const auto trans_out_layout = BijectiveLayoutNode::make(out_layout, kNCHW);
   CHECK(trans_out_layout.defined())
-      << "Conv only support output layouts that are convertible from NCHW."
+      << "Dilation2D only support output layouts that are convertible from NCHW."
       << " But got " << out_layout;
 
   Array<IndexExpr> dshape_nchw = trans_in_layout.ForwardShape(data->shape);
@@ -294,6 +294,7 @@ bool Dilation2DRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
   if (weight == nullptr) return false;
   auto wshape = trans_kernel_layout.ForwardShape(weight->shape);
   channels = wshape[0];
+
   dilated_ksize_y = 1 + (wshape[1] - 1) * param->rates[0];
   dilated_ksize_x = 1 + (wshape[2] - 1) * param->rates[1];
 

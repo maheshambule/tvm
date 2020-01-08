@@ -60,10 +60,7 @@ def dilation2d(input, filter, strides, padding, dilation, layout='NCHW', out_dty
     # default declaration
     if layout == 'NCHW':
         return dilation2d_nchw(input, filter, strides, padding, dilation, out_dtype)
-    elif layout == 'HWCN':
-        return conv2d_hwcn(input, filter, strides, padding, dilation, out_dtype)
-    elif layout == 'NHWC':
-        return conv2d_nhwc(input, filter, strides, padding, dilation, out_dtype)
+
     raise ValueError("not support this layout {} yet".format(layout))
 
 
@@ -108,6 +105,8 @@ def dilation2d_nchw(Input, Filter, stride, padding, dilation, out_dtype=None):
 
     batch, in_channel, in_height, in_width = Input.shape
     channel, kernel_h, kernel_w = Filter.shape
+    assert in_channel.value == channel.value, "For Dilation2D input and filter channels should be same."
+
     # compute the output shape
     dilated_kernel_h = (kernel_h - 1) * dilation_h + 1
     dilated_kernel_w = (kernel_w - 1) * dilation_w + 1

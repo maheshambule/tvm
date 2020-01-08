@@ -350,15 +350,13 @@ def _conv(opname):
         return out
     return _impl
 
+
 #Dilation2d
 def _dilation2d(opname):
 
     def _impl(inputs, attr, params):
         attr['data_format'] = 'NHWC'
         attr['_target_layout'] = "NCHW"
-        flip_layout = False
-        print("Tensorflow _dialtion data" , inputs[0])
-        print("Tensorflow _dialtion kernal", inputs[1])
         # NCHW Layout require weights transpose
         if attr['data_format'] == 'NCHW':
             tmp_shape = attr['_input_shapes'][inputs[1]]
@@ -388,20 +386,15 @@ def _dilation2d(opname):
             flip_layout = True
 
         if attr['data_format'] == 'NHWC':
-            kernel_h, kernel_w, depth_mult = weights_shape
             if 'rates' in attr:
                 attr['rates'] = (attr['rates'][1], attr['rates'][2])
             attr['strides'] = (attr['strides'][1], attr['strides'][2])
         elif attr['data_format'] == 'NCHW':
-            depth_mult, kernel_h, kernel_w = weights_shape
-          #  attr['kernel_shape'] = (weights_shape[1], weights_shape[2])
-
-
             if 'rates' in attr:
                 attr['rates'] = (attr['rates'][1], attr['rates'][2])
             attr['strides'] = (attr['strides'][1], attr['strides'][2])
         else:
-            msg = 'Value {} in attribute "data_format" of operator Conv is ' \
+            msg = 'Value {} in attribute "data_format" of operator Dilation2D is ' \
                   'not valid.'
             raise tvm.error.OpAttributeInvalid(msg.format(attr['data_format']))
 

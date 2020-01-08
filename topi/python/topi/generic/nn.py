@@ -145,12 +145,12 @@ def schedule_conv2d_NCHWc_int8(outs):
 
 @tvm.target.generic_func
 def schedule_dilation2d(outs):
-    """Schedule for conv2d_NCHW[x]c_int8
+    """Schedule for dilation2d
 
     Parameters
     ----------
     outs : Array of Tensor
-        The computation graph description of conv2d_NCHWc_int8
+        The computation graph description of dilation2d
         in the format of an array of tensors.
         The number of filter, i.e., the output channel.
 

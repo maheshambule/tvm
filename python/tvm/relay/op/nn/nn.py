@@ -258,14 +258,14 @@ def conv2d_transpose(data,
 
 
 def dilation2d(data,
-           weight,
-           strides=(1, 1),
-           padding=(0, 0),
-           rates=(1, 1),
-           data_layout="NCHW",
-           kernel_layout="IHW",
-           out_layout="",
-           out_dtype=""):
+               weight,
+               strides=(1, 1),
+               padding=(0, 0),
+               rates=(1, 1),
+               data_layout="NCHW",
+               kernel_layout="IHW",
+               out_layout="",
+               out_dtype=""):
     r"""Dilation 2D.
 
     This operator takes the weight as the dilation kernel
@@ -280,9 +280,9 @@ def dilation2d(data,
 
     .. math::
 
-        \mbox{out}[b, c, y, x] = \sum_{dy, dx, k}
-           \mbox{data}[b, k, \mbox{strides}[0] * y  + dy, \mbox{strides}[1] * x + dx] *
-           \mbox{weight}[c, k, dy, dx]
+        \mbox{out}[b, c, y, x] = \max_{dy, dx}
+           \mbox{data}[b, c, \mbox{strides}[0] * y  + dy, \mbox{strides}[1] * x + dx] +
+           \mbox{weight}[c, dy, dx]
 
     Padding and dilation are applied to data and weight respectively before the computation.
     This operator accepts data layout specification.
@@ -305,17 +305,8 @@ def dilation2d(data,
     padding : Optional[Tuple[int]]
         The padding of convolution on both sides of inputs before convolution.
 
-    dilation : Optional[Tuple[int]]
+    rates : Optional[Tuple[int]]
         Specifies the dilation rate to be used for dilated convolution.
-
-    groups : Optional[int]
-        Number of groups for grouped convolution.
-
-    channels : Optional[int]
-        Number of output channels of this convolution.
-
-    kernel_size : Optional[Tuple[int]]
-        The spatial of the convolution kernel.
 
     data_layout : Optional[str]
         Layout of the input.
@@ -335,7 +326,7 @@ def dilation2d(data,
         The computed result.
     """
     return _make.dilation2d(data, weight, strides, padding, rates, data_layout,
-                        kernel_layout, out_layout, out_dtype)
+                            kernel_layout, out_layout, out_dtype)
 
 
 def softmax(data, axis=-1):

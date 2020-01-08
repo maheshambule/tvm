@@ -260,7 +260,6 @@ def test_dilation2d_run():
         func = relay.Function([x, w], y)
         data = np.random.uniform(-scale, scale, size=dshape).astype(dtype)
         kernel = np.random.uniform(-scale, scale, size=kshape).astype(dtype)
-        #dkernel = topi.testing.dilate_d2d_python(kernel, rates)
 
         ref_res = topi.testing.dilation2d_python(
             data.astype(out_dtype), kernel.astype(out_dtype), strides, padding)
@@ -287,6 +286,7 @@ def test_dilation2d_run():
                         rates=[1, 1],
                         padding=[0, 0, 0, 0],
                         except_targets=['cuda'])
+
 
 def test_conv2d_winograd():
     class WinogradFallback(autotvm.FallbackContext):

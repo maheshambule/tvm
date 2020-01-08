@@ -356,7 +356,6 @@ def compute_dilation2d(attrs, inputs, out_type, target):
     strides = get_const_tuple(attrs.strides)
     rates = get_const_tuple(attrs.rates)
     layout = attrs.data_layout
-    kernel_layout = attrs.kernel_layout
     out_dtype = attrs.out_dtype
     out_dtype = (inputs[0].dtype if out_dtype in ("same", "")
                  else out_dtype)

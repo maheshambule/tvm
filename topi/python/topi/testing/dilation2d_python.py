@@ -17,7 +17,7 @@
 # pylint: disable=invalid-name, line-too-long, unused-variable, too-many-locals
 """Dilation2D in python"""
 
-"""Dilation2D in python"""
+
 import numpy as np
 
 
