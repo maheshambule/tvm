@@ -29,7 +29,7 @@ from .winograd_util import winograd_transform_matrices
 
 @tvm.target.generic_func
 def dilation2d(input, filter, strides, padding, dilation, layout='NCHW', out_dtype=None):
-    """Conv2D operator.
+    """Dilation2D operator.
 
     Parameters
     ----------
@@ -37,7 +37,7 @@ def dilation2d(input, filter, strides, padding, dilation, layout='NCHW', out_dty
         4-D with shape [batch, in_channel, in_height, in_width]
 
     filter : tvm.Tensor
-        4-D with shape [num_filter, in_channel, filter_height, filter_width]
+        3-D with shape [in_channel, filter_height, filter_width]
 
     strides : int or a list/tuple of two ints
         stride size, or [stride_height, stride_width]
@@ -68,7 +68,7 @@ def dilation2d(input, filter, strides, padding, dilation, layout='NCHW', out_dty
 
 
 def dilation2d_nchw(Input, Filter, stride, padding, dilation, out_dtype=None):
-    """Convolution operator in NCHW layout.
+    """Dilation2S operator in NCHW layout.
 
     Parameters
     ----------
@@ -120,14 +120,13 @@ def dilation2d_nchw(Input, Filter, stride, padding, dilation, out_dtype=None):
     pad_before = [0, 0, pad_top, pad_left]
     pad_after = [0, 0, pad_down, pad_right]
     temp = pad(Input, pad_before, pad_after, name="pad_temp")
-    rc = tvm.reduce_axis((0, in_channel), name='rc')
     ry = tvm.reduce_axis((0, kernel_h), name='ry')
     rx = tvm.reduce_axis((0, kernel_w), name='rx')
 
     return tvm.compute(
         (batch, in_channel, out_height, out_width),
         lambda nn, ff, yy, xx: tvm.max(
-            temp[nn, rc, yy * stride_h + ry * dilation_h,
+            temp[nn, ff, yy * stride_h + ry * dilation_h,
                  xx * stride_w + rx * dilation_w].astype(out_dtype) +
-            Filter[rc, ry, rx].astype(out_dtype),
-            axis=[rc, ry, rx]), tag="dilation2d_nchw")
+            Filter[ff, ry, rx].astype(out_dtype),
+            axis=[ry, rx]), tag="dilation2d_nchw")

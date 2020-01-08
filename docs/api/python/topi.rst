@@ -69,6 +69,7 @@ List of operators
    topi.nn.conv2d_hwcn
    topi.nn.depthwise_conv2d_nchw
    topi.nn.depthwise_conv2d_nhwc
+   topi.nn.dilation2d
    topi.max
    topi.sum
    topi.min
@@ -118,6 +119,7 @@ List of schedules
    topi.generic.schedule_reduce
    topi.generic.schedule_broadcast
    topi.generic.schedule_injective
+   topi.generic.schedule_dilation2d
 
 topi
 ~~~~

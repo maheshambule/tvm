@@ -293,7 +293,7 @@ def compute_dilation2d(attrs, inputs, out_type, target):
     out_dtype = (inputs[0].dtype if out_dtype in ("same", "")
                  else out_dtype)
 
-    assert layout in ["NCHW", "NHWC", "NCHW4c", "HWCN"]
+    assert layout in ["NCHW", "NHWC", "HWCN"]
     (dilation_h, dilation_w) = rates
     if dilation_h < 1 or dilation_w < 1:
         raise ValueError("dilation should be positive value")

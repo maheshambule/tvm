@@ -190,6 +190,8 @@ def _pooling(name):
         return out
     return _impl
 
+
+
 def _conv(opname):
     def _impl(inputs, attr, params):
         attr['data_format'] = attr['data_format'].decode("utf-8")
@@ -325,6 +327,120 @@ def _conv(opname):
             out = _op.transpose(out, axes=(0, 2, 3, 1))
 
         return out
+    return _impl
+
+#Dilation2d
+def _dilation2d(opname):
+
+    def _impl(inputs, attr, params):
+        attr['data_format'] = 'NHWC'
+        attr['_target_layout'] = "NCHW"
+        flip_layout = False
+        print("Tensorflow _dialtion data" , inputs[0])
+        print("Tensorflow _dialtion kernal", inputs[1])
+        # NCHW Layout require weights transpose
+        if attr['data_format'] == 'NCHW':
+            tmp_shape = attr['_input_shapes'][inputs[1]]
+            if opname == 'conv':
+                tmp_shape = [tmp_shape[ii] for ii in (3, 2, 0, 1)]
+                inputs[1] = _op.transpose(inputs[1], axes=(3, 2, 0, 1))
+            else:
+                tmp_shape = [tmp_shape[ii] for ii in (2, 3, 0, 1)]
+                inputs[1] = _op.transpose(inputs[1], axes=(2, 3, 0, 1))
+            attr['_input_shapes'][inputs[1]] = tmp_shape
+
+        input_shape = attr['_input_shapes'][inputs[0]]
+        weights_shape = attr['_input_shapes'][inputs[1]]
+
+        if attr['_target_layout'] == "NCHW" and attr['data_format'] == "NHWC":
+            input_shape = [input_shape[ii] for ii in (0, 3, 1, 2)]
+            inputs[0] = _op.transpose(inputs[0], axes=(0, 3, 1, 2))
+            # if opname == 'conv':
+            weights_shape = [weights_shape[ii] for ii in (2, 0, 1)]
+            inputs[1] = _op.transpose(inputs[1], axes=(2, 0, 1))
+            # else:
+            #     weights_shape = [weights_shape[ii] for ii in (2, 3, 0, 1)]
+            #     inputs[1] = _op.transpose(inputs[1], axes=(2, 3, 0, 1))
+
+            attr['data_format'] = "NCHW"
+            #attr['strides'] = [attr['strides'][ii] for ii in (0, 3, 1, 2)]
+            flip_layout = True
+
+        if attr['data_format'] == 'NHWC':
+            kernel_h, kernel_w, depth_mult = weights_shape
+            if 'rates' in attr:
+                attr['rates'] = (attr['rates'][1], attr['rates'][2])
+            attr['strides'] = (attr['strides'][1], attr['strides'][2])
+        elif attr['data_format'] == 'NCHW':
+            depth_mult, kernel_h, kernel_w = weights_shape
+          #  attr['kernel_shape'] = (weights_shape[1], weights_shape[2])
+
+
+            if 'rates' in attr:
+                attr['rates'] = (attr['rates'][1], attr['rates'][2])
+            attr['strides'] = (attr['strides'][1], attr['strides'][2])
+        else:
+            msg = 'Value {} in attribute "data_format" of operator Conv is ' \
+                  'not valid.'
+            raise tvm.error.OpAttributeInvalid(msg.format(attr['data_format']))
+
+
+        # Fix padding
+        attr['padding'] = attr['padding'].decode("utf-8")
+
+        if attr['padding'] == 'VALID':
+            attr['padding'] = [0, 0]
+        elif attr['padding'] == 'SAME':
+            stride_h, stride_w = attr['strides']
+            kernel_h, kernel_w = weights_shape[1], weights_shape[2]
+            if attr['data_format'] == 'NHWC':
+                in_h = input_shape[1]
+                in_w = input_shape[2]
+            else:
+                in_h = input_shape[2]
+                in_w = input_shape[3]
+
+            dilation_h = attr['rates'][0]
+            dilation_w = attr['rates'][1]
+            dilated_kernel_h = (kernel_h - 1) * dilation_h + 1
+            dilated_kernel_w = (kernel_w - 1) * dilation_w + 1
+            pad_v = _get_pad_pair(in_h, dilated_kernel_h, stride_h)
+            pad_h = _get_pad_pair(in_w, dilated_kernel_w, stride_w)
+
+            if attr['data_format'] == 'NHWC':
+                inputs[0] = _op.nn.pad(data=inputs[0],
+                                       pad_width=((0, 0),
+                                                  (pad_v[0], pad_v[1]),
+                                                  (pad_h[0], pad_h[1]),
+                                                  (0, 0)))
+            else:
+                inputs[0] = _op.nn.pad(data=inputs[0],
+                                       pad_width=((0, 0),
+                                                  (0, 0),
+                                                  (pad_v[0], pad_v[1]),
+                                                  (pad_h[0], pad_h[1])))
+
+            attr['padding'] = [0, 0]
+
+        else:
+            msg = 'Value {} in attribute "padding" of operator Conv is not ' \
+                  'valid.'
+            raise tvm.error.OpAttributeInvalid(msg.format(attr['padding']))
+
+        attr['data_format'] = 'NCHW'
+
+        # Ignore the new attributes from TF2.0, for now.
+        out = AttrCvt(
+            op_name='dilation2d',
+            ignores=['explicit_paddings'],
+            transforms={
+                'data_format': 'data_layout',
+
+            })([inputs[0], inputs[1]], attr)
+        out = _op.transpose(out, axes=(0, 2, 3, 1))
+
+        return out
+
     return _impl
 
 def _decode_image():
@@ -1407,6 +1523,7 @@ _convert_map = {
     'DecodeJpeg'                        : _decode_image(),
     'DepthwiseConv2dNative'             : _conv('depthwise'),
     'DepthToSpace'                      : _depth_to_space(),
+    'Dilation2D'                        : _dilation2d('dilation2d'),
     'Equal'                             : _broadcast('equal'),
     'Elu'                               : _elu(),
     'Erf'                               : AttrCvt('erf'),

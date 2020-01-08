@@ -181,16 +181,16 @@ def dilation2d(data,
            kernel_layout="IHW",
            out_layout="",
            out_dtype=""):
-    r"""2D convolution.
+    r"""Dilation 2D.
 
-    This operator takes the weight as the convolution kernel
-    and convolves it with data to produce an output.
+    This operator takes the weight as the dilation kernel
+    and dilates it with data to produce an output.
 
 
     In the default case, where the data_layout is `NCHW`
     and kernel_layout is `OIHW`, conv2d takes in
     a data Tensor with shape `(batch_size, in_channels, height, width)`,
-    and a weight Tensor with shape `(channels, in_channels, kernel_size[0], kernel_size[1])`
+    and a weight Tensor with shape `(channels, kernel_height, kernel_width)`
     to produce an output Tensor with the following rule:
 
     .. math::

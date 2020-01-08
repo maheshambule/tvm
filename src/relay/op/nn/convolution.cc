@@ -878,7 +878,20 @@ TVM_REGISTER_API("relay.op.nn._make.deformable_conv2d")
 // relay.nn.dilation2d
 TVM_REGISTER_NODE_TYPE(Dilation2DAttrs);
 
+template<typename T>
+Array<Array<Layout> > Dilation2DInferCorrectLayout(
+    const Attrs& attrs,
+    const Array<Layout>& new_in_layouts,
+    const Array<Layout>& old_in_layouts,
+    const Array<Array<IndexExpr>> &old_in_shapes) {
+  const T* params = attrs.as<T>();
 
+  // We always make other operators to fit the layouts of convolution layers
+  // So this inference ignores all inputs
+  return Array<Array<Layout> >{{params->data_layout, params->kernel_layout},
+                               {params->out_layout == "" ?
+                                   params->data_layout : params->out_layout}};
+}
 
 // Positional relay function to create dilation2d operator
 // used by frontend FFI.
@@ -926,8 +939,8 @@ with the layer input to produce a tensor of outputs.
 .add_argument("data", "Tensor", "The input tensor.")
 .add_argument("weight", "Tensor", "The weight tensor.")
 .set_support_level(2)
-.add_type_rel("Dilation2D", Dilation2DRel<Dilation2DAttrs>);
-//.set_attr<FInferCorrectLayout>("FInferCorrectLayout", Conv2DInferCorrectLayout<Conv2DAttrs>);
+.add_type_rel("Dilation2D", Dilation2DRel<Dilation2DAttrs>)
+.set_attr<FInferCorrectLayout>("FInferCorrectLayout", Dilation2DInferCorrectLayout<Dilation2DAttrs>);
 
 
 

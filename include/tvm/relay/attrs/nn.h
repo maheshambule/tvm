@@ -221,7 +221,7 @@ struct Dilation2DAttrs : public tvm::AttrsNode<Dilation2DAttrs> {
         .describe("Dimension ordering of weight. Can be 'IHW', 'IHW16o16i', etc."
                   "'I', 'H', 'W' stands for num_filter, input_channel, height, and width"
                   "dimensions respectively.");
-    TVM_ATTR_FIELD(out_layout).set_default("")
+    TVM_ATTR_FIELD(out_layout).set_default("NHWC")
         .describe("Dimension ordering of output. Can be 'NCHW', 'NHWC', etc."
                   "'N', 'C', 'H', 'W' stands for batch, channel, height, and width"
                   "dimensions respectively. Default to be same as input layout.");
