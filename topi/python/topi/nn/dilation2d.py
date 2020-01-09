@@ -18,7 +18,6 @@
 # pylint: disable=unused-argument, redefined-builtin
 """Dilation2D operators"""
 from __future__ import absolute_import as _abs
-from collections import namedtuple
 import tvm
 
 from .pad import pad
