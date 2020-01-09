@@ -87,7 +87,7 @@ def dilation2d_python(a_np, w_np, stride, padding):
             for i in range(0, out_height):
                 for j in range(0, out_width):
                     s = np.max(apad[i * stride_h:(i * stride_h + kernel_h),
-                               j * stride_w:(j * stride_w + kernel_w)] + wt_c)
+                                    j * stride_w:(j * stride_w + kernel_w)] + wt_c)
                     out.append(s)
             out = np.asarray(out).reshape((out_height), (out_width))
             bt[n, c] += out
