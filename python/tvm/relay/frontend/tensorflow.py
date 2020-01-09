@@ -383,7 +383,6 @@ def _dilation2d(opname):
 
             attr['data_format'] = "NCHW"
             #attr['strides'] = [attr['strides'][ii] for ii in (0, 3, 1, 2)]
-            flip_layout = True
 
         if attr['data_format'] == 'NHWC':
             if 'rates' in attr:
