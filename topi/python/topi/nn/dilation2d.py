@@ -23,8 +23,7 @@ import tvm
 
 from .pad import pad
 from .util import get_pad_tuple
-from ..util import simplify, get_const_tuple
-from .winograd_util import winograd_transform_matrices
+from ..util import simplify
 
 
 @tvm.target.generic_func
@@ -105,7 +104,8 @@ def dilation2d_nchw(Input, Filter, stride, padding, dilation, out_dtype=None):
 
     batch, in_channel, in_height, in_width = Input.shape
     channel, kernel_h, kernel_w = Filter.shape
-    assert in_channel.value == channel.value, "For Dilation2D input and filter channels should be same."
+    assert in_channel.value == channel.value, \
+        "For Dilation2D input and filter channels should be same."
 
     # compute the output shape
     dilated_kernel_h = (kernel_h - 1) * dilation_h + 1

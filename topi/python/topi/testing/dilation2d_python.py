@@ -30,7 +30,7 @@ def dilation2d_python(a_np, w_np, stride, padding):
         4-D with shape [batch, in_height, in_width, in_channel]
 
     w_np : numpy.ndarray
-        4-D with shape [filter_height, filter_width, in_channel]
+        3-D with shape [filter_height, filter_width, in_channel]
 
     stride : list of ints in the format
         Stride size, or [1,stride_height, stride_width,1]
@@ -70,9 +70,9 @@ def dilation2d_python(a_np, w_np, stride, padding):
 
     # change the layout from NHWC to NCHW: required for numpy-appropriate processing
     #at = a_np.transpose((0, 3, 1, 2))
-    at=a_np
+    at = a_np
     #wt = w_np.transpose((2, 0, 1))
-    wt=w_np
+    wt = w_np
     bt = np.zeros((batch, out_channel, out_height, out_width))
     # computation
     for n in range(batch):
@@ -84,9 +84,10 @@ def dilation2d_python(a_np, w_np, stride, padding):
                 apad = at[n, c]
             wt_c = wt[c]
             out = []
-            for i in range(0,out_height):
-                for j in range(0,out_width):
-                    s = np.max(apad[i*stride_h:(i*stride_h + kernel_h), j*stride_w:(j*stride_w + kernel_w)] + wt_c)
+            for i in range(0, out_height):
+                for j in range(0, out_width):
+                    s = np.max(apad[i*stride_h:(i*stride_h + kernel_h), j *
+                        stride_w:(j*stride_w + kernel_w)] + wt_c)
                     out.append(s)
             out = np.asarray(out).reshape((out_height), (out_width))
             bt[n, c] += out

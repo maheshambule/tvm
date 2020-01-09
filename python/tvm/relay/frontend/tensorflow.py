@@ -374,15 +374,9 @@ def _dilation2d(opname):
         if attr['_target_layout'] == "NCHW" and attr['data_format'] == "NHWC":
             input_shape = [input_shape[ii] for ii in (0, 3, 1, 2)]
             inputs[0] = _op.transpose(inputs[0], axes=(0, 3, 1, 2))
-            # if opname == 'conv':
             weights_shape = [weights_shape[ii] for ii in (2, 0, 1)]
             inputs[1] = _op.transpose(inputs[1], axes=(2, 0, 1))
-            # else:
-            #     weights_shape = [weights_shape[ii] for ii in (2, 3, 0, 1)]
-            #     inputs[1] = _op.transpose(inputs[1], axes=(2, 3, 0, 1))
-
             attr['data_format'] = "NCHW"
-            #attr['strides'] = [attr['strides'][ii] for ii in (0, 3, 1, 2)]
 
         if attr['data_format'] == 'NHWC':
             if 'rates' in attr:
