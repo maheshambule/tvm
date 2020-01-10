@@ -32,6 +32,7 @@ from .mapping import *
 from .pooling import *
 from .softmax import *
 from .conv2d_transpose import *
+from .conv1d_transpose import *
 from .bnn import *
 from .upsampling import *
 from .local_response_norm import *
@@ -42,3 +43,5 @@ from .batch_matmul import *
 from .sparse import *
 from .pad import *
 from .fifo_buffer import *
+from .depth_to_space import *
+from .space_to_depth import *
