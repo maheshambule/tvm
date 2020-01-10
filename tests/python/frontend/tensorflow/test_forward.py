@@ -2894,12 +2894,13 @@ def _test_dilation2d(opname, tensor_in_sizes, filter_in_sizes,
                                 'Placeholder:0', 'Dilation2D:0')
 
 def test_forward_dilation():
-    _test_dilation2d('dil2d', [1, 18, 18, 32], [4, 4, 32], [1, 1, 1, 1], [1, 2, 2, 1], "VALID")
-    _test_dilation2d('dil2d', [1, 5, 5, 1], [2, 2, 1], [1, 1, 1, 1], [1, 1, 1, 1], "VALID")
-    _test_dilation2d('dil2d', [1, 5, 5, 1], [3, 3, 1], [1, 1, 1, 1], [1, 2, 2, 1], "VALID")
-    _test_dilation2d('dil2d', [1, 5, 5, 3], [3, 3, 3], [1, 1, 1, 1], [1, 1, 1, 1], "SAME")
-    _test_dilation2d('dil2d', [1, 28, 28, 3], [5, 5, 3], [1, 2, 2, 1], [1, 1, 1, 1], "VALID")
-    _test_dilation2d('dil2d', [1, 224, 224, 10], [8, 8, 10], [1, 1, 1, 1], [1, 1, 1, 1], "VALID")
+    if is_gpu_available():
+        _test_dilation2d('dil2d', [1, 18, 18, 32], [4, 4, 32], [1, 1, 1, 1], [1, 2, 2, 1], "VALID")
+        _test_dilation2d('dil2d', [1, 5, 5, 1], [2, 2, 1], [1, 1, 1, 1], [1, 1, 1, 1], "VALID")
+        _test_dilation2d('dil2d', [1, 5, 5, 1], [3, 3, 1], [1, 1, 1, 1], [1, 2, 2, 1], "VALID")
+        _test_dilation2d('dil2d', [1, 5, 5, 3], [3, 3, 3], [1, 1, 1, 1], [1, 1, 1, 1], "SAME")
+        _test_dilation2d('dil2d', [1, 28, 28, 3], [5, 5, 3], [1, 2, 2, 1], [1, 1, 1, 1], "VALID")
+        _test_dilation2d('dil2d', [1, 224, 224, 10], [8, 8, 10], [1, 1, 1, 1], [1, 1, 1, 1], "VALID")
 
 #######################################################################
 # Main
