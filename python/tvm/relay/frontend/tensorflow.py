@@ -507,7 +507,7 @@ def _dilation2d(opname):
             attr['padding'] = [0, 0]
 
         else:
-            msg = 'Value {} in attribute "padding" of operator Conv is not ' \
+            msg = 'Value {} in attribute "padding" of operator Dilation2d is not ' \
                   'valid.'
             raise tvm.error.OpAttributeInvalid(msg.format(attr['padding']))
 
@@ -522,9 +522,7 @@ def _dilation2d(opname):
 
             })([inputs[0], inputs[1]], attr)
         out = _op.transpose(out, axes=(0, 2, 3, 1))
-
         return out
-
     return _impl
 
 def _decode_image():

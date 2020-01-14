@@ -236,7 +236,7 @@ def test_dilation2d_infer_type():
                         padding=[0, 0, 0, 0])
     yy = run_infer_type(y)
     assert yy.checked_type == relay.TensorType(
-        (n, 10, 217, 217,), "float32")
+        (n, 10, 217, 217), "float32")
 
 
 def test_dilation2d_run():
@@ -275,7 +275,7 @@ def test_dilation2d_run():
     kshape = (3, 3, 3)
     run_test_dilation2d("float32", "float32", 1, dshape, kshape,
                         strides=[1, 1],
-                        rates=[1, 1,],
+                        rates=[1, 1],
                         padding=[0, 0, 0, 0],
                         except_targets=['cuda'])
     #  dilation rate 1
@@ -286,7 +286,9 @@ def test_dilation2d_run():
                         rates=[1, 1],
                         padding=[0, 0, 0, 0],
                         except_targets=['cuda'])
-
+def test_dilation2d():
+    test_dilation2d_infer_type()
+    test_dilation2d_run()
 
 def test_conv2d_winograd():
     class WinogradFallback(autotvm.FallbackContext):
@@ -1052,8 +1054,8 @@ def test_bitpack_infer_type():
 
 
 if __name__ == "__main__":
-    test_dilation2d_infer_type()
-    test_dilation2d_run()
+
+    test_dilation2d()
     test_pool2d()
     test_pool3d()
     test_avg_pool2d_no_count_pad()

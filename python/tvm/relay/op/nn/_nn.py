@@ -405,12 +405,9 @@ def compute_dilation2d(attrs, inputs, out_type, target):
     (dilation_h, dilation_w) = rates
     if dilation_h < 1 or dilation_w < 1:
         raise ValueError("dilation should be positive value")
-
-
     out = topi.nn.dilation2d(
         inputs[0], inputs[1], strides, padding,
         rates, layout, out_dtype)
-
     return [out]
 
 
@@ -418,7 +415,6 @@ def compute_dilation2d(attrs, inputs, out_type, target):
 def schedule_dilation2d(attrs, outs, target):
     """Schedule definition of dilation2d"""
     return topi.generic.schedule_dilation2d(outs)
-
 
 reg.register_pattern("nn.dilation2d", OpPattern.OUT_ELEMWISE_FUSABLE)
 
