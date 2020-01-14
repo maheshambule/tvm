@@ -2890,7 +2890,7 @@ def _test_dilation2d(tensor_in_sizes, filter_in_sizes,
                           padding=padding)
 
         compare_tf_with_tvm(np.reshape(data_array, tensor_in_sizes).astype('float32'),
-                            'Placeholder:0', 'Dilation2D:0')
+                            'Placeholder:0', 'Dilation2D:0', no_gpu=True)
 
 def test_forward_dilation():
     _test_dilation2d([1, 18, 18, 32], [4, 4, 32], [1, 1, 1, 1], [1, 2, 2, 1], "VALID")

@@ -1099,8 +1099,6 @@ TVM_REGISTER_API("relay.op.nn._make.deformable_conv2d")
 .set_body_typed(MakeDeformableConv2D);
 
 
-
-
 // relay.nn.dilation2d
 TVM_REGISTER_NODE_TYPE(Dilation2DAttrs);
 
@@ -1122,14 +1120,14 @@ Array<Array<Layout> > Dilation2DInferCorrectLayout(
 // Positional relay function to create dilation2d operator
 // used by frontend FFI.
 Expr MakeDilation2D(Expr data,
-                Expr weight,
-                Array<IndexExpr> strides,
-                Array<IndexExpr> padding,
-                Array<IndexExpr> rates,
-                std::string data_layout,
-                std::string kernel_layout,
-                std::string out_layout,
-                DataType out_dtype) {
+                    Expr weight,
+                    Array<IndexExpr> strides,
+                    Array<IndexExpr> padding,
+                    Array<IndexExpr> rates,
+                    std::string data_layout,
+                    std::string kernel_layout,
+                    std::string out_layout,
+                    DataType out_dtype) {
   auto attrs = make_node<Dilation2DAttrs>();
   attrs->strides = std::move(strides);
   attrs->padding = std::move(padding);
