@@ -640,6 +640,11 @@ def _mx_tile(inputs, attrs):
     return _op.tile(inputs[0], **new_attrs)
 
 
+def _mx_make_loss(inputs, attrs):
+    #in forward pass identity is returned for make_Loss
+    return inputs[0]
+
+
 def _mx_take(inputs, attrs):
     assert len(inputs) == 2
     mode = attrs.get_str("mode", "clip")
@@ -1098,7 +1103,6 @@ _identity_list = [
 
 _convert_map = {
     "_copy"                  : _rename(_op.copy),
-    "make_loss"              : _rename(_op.copy),
     "relu"                   : _rename(_op.nn.relu),
     "broadcast_add"          : _rename(_op.add),
     "broadcast_sub"          : _rename(_op.subtract),
@@ -1228,6 +1232,7 @@ _convert_map = {
     "smooth_l1"     : _mx_smooth_l1,
     "_contrib_div_sqrt_dim": _mx_contrib_div_sqrt_dim,
     "one_hot"           : _mx_one_hot,
+    "make_loss": _mx_make_loss,
     # vision
     "_contrib_BilinearResize2D" : _mx_resize,
     "_contrib_MultiBoxPrior" : _mx_multibox_prior,
