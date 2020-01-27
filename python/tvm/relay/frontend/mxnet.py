@@ -1098,6 +1098,7 @@ _identity_list = [
 
 _convert_map = {
     "_copy"                  : _rename(_op.copy),
+    "make_loss"              : _rename(_op.copy),
     "relu"                   : _rename(_op.nn.relu),
     "broadcast_add"          : _rename(_op.add),
     "broadcast_sub"          : _rename(_op.subtract),
