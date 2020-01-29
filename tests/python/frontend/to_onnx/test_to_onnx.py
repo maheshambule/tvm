@@ -86,7 +86,7 @@ def test_bias_add():
 
 
 def test_conv2d():
-    def run_test_conv2d(dtype, out_dtype, scale, dshape, kshape,
+    def _test_conv2d(dtype, out_dtype, scale, dshape, kshape,
                         padding=(1, 1),
                         groups=1,
                         dilation=(1, 1),
