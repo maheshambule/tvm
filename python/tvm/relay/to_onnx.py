@@ -267,7 +267,7 @@ class ModelContainer(object):
 
 
 class RelayToONNXConverter(object):
-    """A helper class converting topologically sorted  Relay Node list to ONNX model
+    """A helper class converting topologically sorted Relay nodes to ONNX model
 
     Parameters
     ----------
