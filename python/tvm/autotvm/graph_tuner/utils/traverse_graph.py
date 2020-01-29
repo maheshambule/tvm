@@ -99,12 +99,7 @@ def _expr2graph_impl(expr, target_ops, node_dict, node_list):
                       "op": "null", "name": None}
 
         if isinstance(node, Call):
-            if not hasattr(node.op, 'name'):
-                print("asd")
-            try:
-                op_name = node.op.name.split(".")[-1]
-            except:
-                op_name = "func_{0}".format(node_index)
+            op_name = node.op.name.split(".")[-1]
             node_entry["op"] = op_name
             for arg in node.args:
                 in_node_idx = node_dict[arg]
