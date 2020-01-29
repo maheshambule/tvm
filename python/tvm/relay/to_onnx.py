@@ -296,7 +296,7 @@ class RelayToONNXConverter(object):
             elif isinstance(node, Constant):
                 self._add_constant_input(node_entry, idx)
             elif isinstance(node, (TupleGetItem, Tuple)):
-                out_idx = idx - 1  # Need to work on this. No equivalent ONNX operator found yet
+                out_idx = idx - 1  # TODO: Need to work on this. No equivalent ONNX operator found yet
             else:
                 raise NotImplementedError("Relay Node of type {0} is not "
                                           "implemented yet".format(type(node)))
@@ -379,7 +379,7 @@ class RelayToONNXConverter(object):
 
 
 def to_onnx(relay_module, params, name, path=None):
-    """Converts a Relay Function Module into an equivalent ONNX and serialises it to the path
+    """Convert a Relay Function Module into an equivalent ONNX and serialize it to the path
 
     Parameters
     ----------
