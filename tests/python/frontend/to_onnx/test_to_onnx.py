@@ -30,7 +30,7 @@ def func_to_onnx(func, name):
     return onnx_model.SerializeToString()
 
 
-def do_onnx_inference(onnx_model, input_data):
+def run_onnx(onnx_model, input_data):
     sess = rt.InferenceSession(onnx_model)
     input_names ={}
     for input, data in zip(sess.get_inputs(), input_data):
@@ -40,7 +40,7 @@ def do_onnx_inference(onnx_model, input_data):
     return res[0]
 
 
-def do_relay_inference(func, data_tuple):
+def run_relay(func, data_tuple):
     target = 'llvm'
     ctx = tvm.context('llvm', 0)
     intrp = relay.create_executor("graph", ctx=ctx, target=target)
@@ -60,8 +60,8 @@ def test_add():
     x_data = np.random.rand(5, 10, 5).astype(dtype)
     y_data = np.random.rand(5, 10, 5).astype(dtype)
 
-    relay_res = do_relay_inference(func, (x_data, y_data))
-    onnx_res = do_onnx_inference(func_to_onnx(func, 'add'), [x_data, y_data])
+    relay_res = run_relay(func, (x_data, y_data))
+    onnx_res = run_onnx(func_to_onnx(func, 'add'), [x_data, y_data])
 
     np.testing.assert_allclose(relay_res, onnx_res)
 
@@ -79,14 +79,14 @@ def test_bias_add():
         x_data = np.random.uniform(size=xshape).astype(dtype)
         y_data = np.random.uniform(size=bshape).astype(dtype)
 
-        relay_res = do_relay_inference(func, (x_data, y_data))
-        onnx_res = do_onnx_inference(func_to_onnx(func, 'test_bias_add'), [x_data, y_data])
+        relay_res = run_relay(func, (x_data, y_data))
+        onnx_res = run_onnx(func_to_onnx(func, 'test_bias_add'), [x_data, y_data])
 
         np.testing.assert_allclose(relay_res, onnx_res, rtol=rtol)
 
 
 def test_conv2d():
-    def _test_conv2d(dtype, out_dtype, scale, dshape, kshape,
+    def verify_conv2d(dtype, out_dtype, scale, dshape, kshape,
                         padding=(1, 1),
                         groups=1,
                         dilation=(1, 1),
@@ -102,37 +102,58 @@ def test_conv2d():
         func = relay.Function([x, w], y)
         data = np.random.uniform(-scale, scale, size=dshape).astype(dtype)
         kernel = np.random.uniform(-scale, scale, size=kshape).astype(dtype)
-        relay_res = do_relay_inference(func, (data, kernel))
-        onnx_res = do_onnx_inference(func_to_onnx(func, 'test_conv2d'), [data, kernel])
+        relay_res = run_relay(func, (data, kernel))
+        onnx_res = run_onnx(func_to_onnx(func, 'test_conv2d'), [data, kernel])
 
         tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
 
 
     dshape = (1, 32, 18, 18)
     kshape = (32, 1, 3, 3)
-    run_test_conv2d("float32", "float32", 1, dshape, kshape,
+    verify_conv2d("float32", "float32", 1, dshape, kshape,
                     padding=(1, 1), channels=32, groups=32, kernel_size=(3, 3))
 
     dshape = (1, 32, 18, 18)
     kshape = (32, 4, 3, 3)
-    run_test_conv2d("float32", "float32", 1, dshape, kshape,
+    verify_conv2d("float32", "float32", 1, dshape, kshape,
                     padding=(1, 1), channels=32, groups=8, kernel_size=(3, 3))
+
     # also group conv2d
     dshape = (1, 32, 18, 18)
     kshape = (64, 1, 3, 3)
-    run_test_conv2d("float32", "float32", 1, dshape, kshape,
+    verify_conv2d("float32", "float32", 1, dshape, kshape,
                     padding=(1, 1), channels=64, groups=32, kernel_size=(3, 3))
 
     # normal conv2d
     dshape = (1, 3, 224, 224)
     kshape = (10, 3, 3, 3)
-    run_test_conv2d("float32", "float32", 1, dshape, kshape,
+    verify_conv2d("float32", "float32", 1, dshape, kshape,
                     padding=(1, 1), channels=10, kernel_size=(3, 3))
+
+    dshape = (1, 3, 224, 224)
+    kshape = (10, 3, 3, 3)
+    verify_conv2d("float32", "float32", 1, dshape, kshape,
+                    padding=(2, 2), channels=10, kernel_size=(3, 3))
 
     dshape = (1, 3, 18, 18)
     kshape = (10, 3, 3, 3)
-    run_test_conv2d("float32", "float32", 1, dshape, kshape,
+    verify_conv2d("float32", "float32", 1, dshape, kshape,
                     padding=(1, 1), channels=10, kernel_size=(3, 3), dilation=(3, 3))
+
+    dshape = (1, 3, 18, 18)
+    kshape = (10, 3, 2, 2)
+    verify_conv2d("float32", "float32", 1, dshape, kshape,
+                    padding=(2, 2), channels=10, kernel_size=(2, 2), dilation=(1, 1))
+
+    dshape = (1, 3, 18, 18)
+    kshape = (10, 3, 4, 4)
+    verify_conv2d("float32", "float32", 1, dshape, kshape,
+                    padding=(1, 1), channels=10, kernel_size=(4, 4))
+
+    dshape = (1, 3, 18, 18)
+    kshape = (10, 3, 4, 4)
+    verify_conv2d("float32", "float32", 1, dshape, kshape,
+                  padding=(1, 1), channels=10, kernel_size=(4, 4))
 
 
 def test_reshape():
@@ -142,8 +163,8 @@ def test_reshape():
 
         func = relay.Function([x], z)
         x_data = np.random.uniform(low=-1, high=1, size=shape).astype("float32")
-        relay_res = do_relay_inference(func, (x_data,))
-        onnx_res = do_onnx_inference(func_to_onnx(func, 'test_reshape'), [x_data])
+        relay_res = run_relay(func, (x_data,))
+        onnx_res = run_onnx(func_to_onnx(func, 'test_reshape'), [x_data])
         tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
 
     verify_reshape((2, 3, 4), tuple(np.array([4, 2, 3], dtype=np.int64)))
@@ -159,8 +180,8 @@ def test_transpose():
 
         func = relay.Function([x], z)
         x_data = np.random.uniform(low=-1, high=1, size=shape).astype("float32")
-        relay_res = do_relay_inference(func, (x_data,))
-        onnx_res = do_onnx_inference(func_to_onnx(func, 'test_transpose'), [x_data])
+        relay_res = run_relay(func, (x_data,))
+        onnx_res = run_onnx(func_to_onnx(func, 'test_transpose'), [x_data])
         tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
 
     verify_reshape((1, 2, 3, 4), (0, 2, 3, 1))
@@ -174,8 +195,8 @@ def test_dense():
         func = relay.Function([data, weight], relay.nn.dense(data, weight))
         x_data = np.random.uniform(size=d_shape).astype("float32")
         w_data = np.random.uniform(size=w_shape).astype("float32")
-        relay_res = do_relay_inference(func, (x_data,w_data))
-        onnx_res = do_onnx_inference(func_to_onnx(func, 'test_dense'), [x_data, w_data])
+        relay_res = run_relay(func, (x_data,w_data))
+        onnx_res = run_onnx(func_to_onnx(func, 'test_dense'), [x_data, w_data])
         tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
 
     verify_dense((1, 8), (16, 8))
@@ -190,8 +211,8 @@ def test_max_pool():
 
         func = relay.Function([x], y)
         x_data = np.random.uniform(size=x_shape).astype("float32")
-        relay_res = do_relay_inference(func, (x_data,))
-        onnx_res = do_onnx_inference(func_to_onnx(func, 'test_max_pool'), [x_data])
+        relay_res = run_relay(func, (x_data,))
+        onnx_res = run_onnx(func_to_onnx(func, 'test_max_pool'), [x_data])
         tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
 
     verify_max_pool((1, 4, 16, 16), pool_size=(2, 2), strides=(2, 2), padding=(0, 0), ceil_mode=False)
@@ -202,8 +223,8 @@ def test_batch_flatten():
         data = relay.var("data", relay.TensorType(d_shape, "float32"))
         func = relay.Function([data], relay.nn.batch_flatten(data))
         x_data = np.random.uniform(size=d_shape).astype("float32")
-        relay_res = do_relay_inference(func, (x_data,))
-        onnx_res = do_onnx_inference(func_to_onnx(func, 'test_batch_flatten'), [x_data])
+        relay_res = run_relay(func, (x_data,))
+        onnx_res = run_onnx(func_to_onnx(func, 'test_batch_flatten'), [x_data])
         tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
 
     verify_test_batch_flatten((1, 2, 3, 4))
@@ -218,8 +239,8 @@ def test_bias_add():
 
         x_data = np.random.uniform(size=(1, 16)).astype("float32")
         bias = np.random.uniform(size=(16,)).astype("float32")
-        relay_res = do_relay_inference(func, (x_data,bias))
-        onnx_res = do_onnx_inference(func_to_onnx(func, 'test_bias_add'), [x_data, bias])
+        relay_res = run_relay(func, (x_data,bias))
+        onnx_res = run_onnx(func_to_onnx(func, 'test_bias_add'), [x_data, bias])
         tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
 
     verify_bias_add()
@@ -242,8 +263,8 @@ def test_batch_norm():
             moving_mean = np.random.uniform(size=(2,)).astype(dtype)
             moving_var = np.random.uniform(size=(2,)).astype(dtype)
 
-            relay_res = do_relay_inference(func, (x_data, gamma, beta, moving_mean, moving_var))
-            onnx_res = do_onnx_inference(func_to_onnx(func, 'test_batch_norm'), [x_data, gamma,beta, moving_mean, moving_var])
+            relay_res = run_relay(func, (x_data, gamma, beta, moving_mean, moving_var))
+            onnx_res = run_onnx(func_to_onnx(func, 'test_batch_norm'), [x_data, gamma,beta, moving_mean, moving_var])
             tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
 
     verify_batch_norm()

@@ -25,14 +25,6 @@ from tvm.autotvm.graph_tuner.utils.traverse_graph import _expr2graph_impl
 from tvm.relay.expr import Call, TupleGetItem, Var, Constant, Tuple
 
 
-def relay_layout_to_storage_order(storage_order):
-    """converter of tvm storage order format parameter to onnx storage order"""
-    if storage_order not in ('NCHW', 'NHWC'):
-        raise Exception("Mode of storage_order must be either 'NCHW' or 'NHWC'")
-
-    return 0 if storage_order == 'NCHW' else 1
-
-
 class OpConverter(object):
     """ Operator converter Base Class.
     """
@@ -97,7 +89,7 @@ class Conv(OpConverter):
             'strides': attrs.get_int_tuple("strides"),
             'dilations': attrs.get_int_tuple("dilation"),
             'kernel_shape': attrs.get_int_tuple("kernel_size"),
-            }
+        }
 
 
 class MaxPool(OpConverter):
@@ -109,7 +101,7 @@ class MaxPool(OpConverter):
             'pads': attrs.get_int_tuple("padding") + attrs.get_int_tuple("padding"),
             'strides': attrs.get_int_tuple("strides"),
             'kernel_shape': attrs.get_int_tuple("pool_size"),
-            }
+        }
 
 
 class Transpose(OpConverter):
@@ -144,7 +136,7 @@ class Flatten(OpConverter):
     def convert_attributes(cls, attrs):
         return {
             'axis': 1,
-            }
+        }
 
 
 class BatchNormalization(OpConverter):
@@ -155,7 +147,7 @@ class BatchNormalization(OpConverter):
         return {
             'epsilon': float(attrs.get_str('epsilon')),
             # 'spatial' : 1 #TODO - version based support
-            }
+        }
 
 
 class Dropout(OpConverter):
@@ -180,7 +172,7 @@ class Concat(OpConverter):
     def convert_attributes(cls, attrs):
         return {
             'axis': attrs.get_int("axis"),
-            }
+        }
 
 
 class BiasAdd(OpConverter):
@@ -195,13 +187,13 @@ class BiasAdd(OpConverter):
         axis = node['node'].attrs.get_int("axis")
         if axis < 0:
             axis = axis + data_ndim
-        num_newaxis = data_ndim - axis - 1
-        if num_newaxis:
+        new_axes = data_ndim - axis - 1
+        if new_axes:
             output_name = 'inter{}'.format(node['output_names'][0])
             transpose_node = onnx.helper.make_node('Unsqueeze',
                                                    [node['input_names'][1]],
                                                    [output_name],
-                                                   **{'axes': tuple(range(1, num_newaxis+1))})
+                                                   **{'axes': tuple(range(1, new_axes+1))})
             model_container.add_nodes([transpose_node])
         else:
             output_name = node['input_names'][1]
@@ -255,7 +247,7 @@ class ModelContainer(object):
         self._initializers.extend(initializers)
 
     def make_model(self):
-        graph_def = onnx.helper.make_graph(
+        onnx_graph = onnx.helper.make_graph(
             self._nodes,
             self._name,
             self._inputs,
@@ -263,7 +255,7 @@ class ModelContainer(object):
             self._initializers
         )
 
-        return onnx.helper.make_model(graph_def, producer_name='relay')
+        return onnx.helper.make_model(onnx_graph, producer_name='relay')
 
 
 class RelayToONNXConverter(object):
@@ -387,7 +379,7 @@ def to_onnx(relay_module, params, name, path=None):
     Parameters
     ----------
     relay_module : tvm.relay.Module
-             The relay module object
+        The relay module object
 
     params : dict
         dict of the parameter names and NDarray values
