@@ -639,9 +639,8 @@ def _mx_tile(inputs, attrs):
     new_attrs["reps"] = attrs.get_int_tuple("reps")
     return _op.tile(inputs[0], **new_attrs)
 
-
+# pylint: disable=unused-argument
 def _mx_make_loss(inputs, attrs):
-    #in forward pass identity is returned for make_Loss
     return inputs[0]
 
 
