@@ -107,7 +107,6 @@ def test_conv2d():
 
         tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
 
-
     dshape = (1, 32, 18, 18)
     kshape = (32, 1, 3, 3)
     verify_conv2d("float32", "float32", 1, dshape, kshape,
@@ -185,6 +184,7 @@ def test_transpose():
         tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
 
     verify_reshape((1, 2, 3, 4), (0, 2, 3, 1))
+    verify_reshape((1, 2, 3, 4), (0, 3, 2, 1))
 
 
 def test_dense():
@@ -247,27 +247,98 @@ def test_bias_add():
 
 
 def test_batch_norm():
-    def verify_batch_norm():
+    def verify_batch_norm(axis=1):
         for dtype in ['float16', 'float32']:
-            data = relay.var("data", relay.TensorType((3, 2, 1), dtype))
-            beta = relay.var("beta", relay.TensorType((2,), dtype))
-            gamma = relay.var("gamma", relay.TensorType((2,), dtype))
-            moving_mean = relay.var("moving_mean", relay.TensorType((2,), dtype))
-            moving_var = relay.var("moving_var", relay.TensorType((2,), dtype))
-            y = relay.nn.batch_norm(data, gamma, beta, moving_mean, moving_var)
+            data = relay.var("data", relay.TensorType((2, 4, 4, 1), dtype))
+            gamma_shape = (data.type_annotation.shape[axis].value,)
+            beta = relay.var("beta", relay.TensorType(gamma_shape, dtype))
+            gamma = relay.var("gamma", relay.TensorType(gamma_shape, dtype))
+            moving_mean = relay.var("moving_mean", relay.TensorType(gamma_shape, dtype))
+            moving_var = relay.var("moving_var", relay.TensorType(gamma_shape, dtype))
+            y = relay.nn.batch_norm(data, gamma, beta, moving_mean, moving_var, axis=axis)
             func = relay.Function([data, gamma, beta, moving_mean, moving_var], y[0])
 
-            x_data = np.random.uniform(size=(3, 2, 1)).astype(dtype)
-            beta = np.random.uniform(size=(2,)).astype(dtype)
-            gamma = np.random.uniform(size=(2,)).astype(dtype)
-            moving_mean = np.random.uniform(size=(2,)).astype(dtype)
-            moving_var = np.random.uniform(size=(2,)).astype(dtype)
+            x_data = np.random.uniform(size=(2, 4, 4, 1)).astype(dtype)
+            beta = np.random.uniform(size=gamma_shape).astype(dtype)
+            gamma = np.random.uniform(size=gamma_shape).astype(dtype)
+            moving_mean = np.random.uniform(size=gamma_shape).astype(dtype)
+            moving_var = np.random.uniform(size=gamma_shape).astype(dtype)
 
             relay_res = run_relay(func, (x_data, gamma, beta, moving_mean, moving_var))
             onnx_res = run_onnx(func_to_onnx(func, 'test_batch_norm'), [x_data, gamma,beta, moving_mean, moving_var])
+
+            tol = 1e-3  # TODO - high tolerance
+            tvm.testing.assert_allclose(relay_res, onnx_res, rtol=tol, atol=tol)
+
+    verify_batch_norm(axis=1)
+    verify_batch_norm(axis=3)
+
+
+def test_pad():
+    def verify_pad():
+        for dtype in ['float16', 'float32']:
+            dshape = (4, 10, 7, 7)
+            x = relay.var("x", shape=dshape, dtype=dtype)
+            y = relay.nn.pad(x, ((1, 1), (2, 2), (3, 3), (4, 4)))
+            func = relay.Function([x], y)
+
+            data = np.random.uniform(size=dshape).astype(dtype)
+            relay_res = run_relay(func, (data,))
+            onnx_res = run_onnx(func_to_onnx(func, 'test_pad'), [data])
             tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
 
-    verify_batch_norm()
+    verify_pad()
+
+
+def test_sofmax():
+    def verify_sofmax():
+        for dtype in ['float32']:
+
+            shape = (10, 4)
+            x = relay.var("x", shape=shape, dtype=dtype)
+            y = relay.nn.softmax(x, axis=1)
+            func = relay.Function([x], y)
+            x_data = np.random.uniform(size=shape).astype(dtype)
+
+            relay_res = run_relay(func, (x_data,))
+            onnx_res = run_onnx(func_to_onnx(func, 'test_sofmax'), [x_data])
+            tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+
+    verify_sofmax()
+
+
+def test_squeeze():
+    def verify_squeeze(shape, dtype, axis):
+        x = relay.var("x", relay.TensorType(shape, dtype))
+        z = relay.squeeze(x, axis=axis)
+        func = relay.Function([x], z)
+
+        x_data = np.random.random_sample(shape).astype(dtype)
+        relay_res = run_relay(func, (x_data,))
+        onnx_res = run_onnx(func_to_onnx(func, 'test_squeeze'), [x_data])
+        tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+
+    verify_squeeze((1, 3, 2, 5), "float32", None)
+    verify_squeeze((1, 3, 1), "float32", [2,])
+    verify_squeeze((1, 2, 1, 2, 1), "float32", [0, 2])
+
+
+def test_mean():
+    def verify_mean(data_shape, axis, exclude, keepdims):
+        dtype = "float32"
+        x = relay.var('x', shape=data_shape, dtype=dtype)
+        y = relay.mean(x, axis, keepdims, exclude)
+        func = relay.Function([x], y)
+        x_data = np.random.uniform(size=data_shape).astype(dtype)
+        relay_res = run_relay(func, (x_data,))
+        onnx_res = run_onnx(func_to_onnx(func, 'test_mean'), [x_data])
+        tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+
+    verify_mean((1, 2), 0, False, False)
+    verify_mean((1, 2), 0, True, False)
+    verify_mean((1, 2), 0, True, True)
+    verify_mean((1, 2), 1, True, True)
+    verify_mean((3, 2, 1), 1, False, True)
 
 
 if __name__ == '__main__':
@@ -281,3 +352,7 @@ if __name__ == '__main__':
     test_batch_flatten()
     test_bias_add()
     test_batch_norm()
+    test_pad()
+    test_mean()
+    test_sofmax()
+    test_squeeze()

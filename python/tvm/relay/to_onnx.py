@@ -24,6 +24,8 @@ from onnx import numpy_helper
 from tvm.autotvm.graph_tuner.utils.traverse_graph import _expr2graph_impl
 from tvm.relay.expr import Call, TupleGetItem, Var, Constant, Tuple
 
+def tvm_array_to_list(arr):
+    return tuple(x.value for x in arr)
 
 class OpConverter(object):
     """ Operator converter Base Class.
@@ -65,7 +67,8 @@ class Reshape(object):
         """
 
         shape = numpy.asarray([a.value for a in node['node'].attrs.newshape],
-                              dtype=node['node'].attrs.newshape[0].dtype)
+                              dtype=numpy.int64)
+                              #dtype=node['node'].attrs.newshape[0].dtype)
         input_name = 'shape{}'.format(node['output_names'][0])
         node = onnx.helper.make_node(cls.__name__, [node['input_names'][0], input_name],
                                      node['output_names'])
@@ -98,7 +101,7 @@ class MaxPool(OpConverter):
     @classmethod
     def convert_attributes(cls, attrs):
         return {
-            'pads': attrs.get_int_tuple("padding") + attrs.get_int_tuple("padding"),
+            'pads': attrs.get_int_tuple("padding"),
             'strides': attrs.get_int_tuple("strides"),
             'kernel_shape': attrs.get_int_tuple("pool_size"),
         }
@@ -146,8 +149,41 @@ class BatchNormalization(OpConverter):
     def convert_attributes(cls, attrs):
         return {
             'epsilon': float(attrs.get_str('epsilon')),
-            # 'spatial' : 1 #TODO - version based support
+            'axis': float(attrs.get_int('axis')),
+           # 'spatial': 1  # TODO - version based support
         }
+
+    @classmethod
+    def convert(cls, node, model_container, node_list):
+            """Converts Relay operator batch_norm to ONNX operator.
+               Relay operator has property axis to handle data in NHWC format.
+            """
+            attrs = cls.convert_attributes(node['node'].attrs)
+            transpose_out_name = node['input_names'][0]
+            output_names = node['output_names']
+
+            # axis==3 means channel is specified along the 3rd axis
+            if attrs['axis'] == 3:
+                transpose_out_name = 'transpose_{}'.format(node['output_names'][0])
+                node_transposed = onnx.helper.make_node(Transpose.__name__,
+                                                        [node['input_names'][0]],
+                                                        [transpose_out_name],
+                                                        **{'perm': [0, 3, 1, 2]})
+                model_container.add_nodes([node_transposed])
+                output_names = ['batch_norm_{}'.format(node['output_names'][0])]
+
+            batch_norm_node = onnx.helper.make_node(cls.__name__,
+                                                    [transpose_out_name] + node['input_names'][1:],
+                                                    output_names,
+                                                    **{'epsilon': attrs['epsilon']})
+            model_container.add_nodes([batch_norm_node])
+
+            if attrs['axis'] == 3:
+                node_transposed = onnx.helper.make_node(Transpose.__name__,
+                                                        output_names,
+                                                        node['output_names'],
+                                                        **{'perm': [0, 2, 3, 1]})
+                model_container.add_nodes([node_transposed])
 
 
 class Dropout(OpConverter):
@@ -181,7 +217,6 @@ class BiasAdd(OpConverter):
 
     @classmethod
     def convert(cls, node, model_container, node_list):
-
         input_node = node_list[node['inputs'][0][0]]
         data_ndim = len(input_node['types'][0].shape)
         axis = node['node'].attrs.get_int("axis")
@@ -190,17 +225,140 @@ class BiasAdd(OpConverter):
         new_axes = data_ndim - axis - 1
         if new_axes:
             output_name = 'inter{}'.format(node['output_names'][0])
-            transpose_node = onnx.helper.make_node('Unsqueeze',
+            unsqueeze_node = onnx.helper.make_node('Unsqueeze',
                                                    [node['input_names'][1]],
                                                    [output_name],
                                                    **{'axes': tuple(range(1, new_axes+1))})
-            model_container.add_nodes([transpose_node])
+            model_container.add_nodes([unsqueeze_node])
         else:
             output_name = node['input_names'][1]
 
         inputs = [node['input_names'][0], output_name]
         matmul_node = onnx.helper.make_node('Add', inputs, node['output_names'])
         model_container.add_nodes([matmul_node])
+
+
+class ReduceMean(OpConverter):
+    """ Operator converter for ReduceMean.
+    """
+    @classmethod
+    def convert_attributes(cls, attrs):
+        return {
+            'axes': attrs.axis,
+            'keepdims': 0 if bool(attrs.get_int("keepdims", 0)) is False else 1
+        }
+
+    @classmethod
+    def convert(cls, node, model_container, node_list):
+        input_node = node_list[node['inputs'][0][0]]
+        shape = input_node['types'][0].shape
+        axis = node['node'].attrs.axis
+        axis = list(range(shape.size())) if not axis else tvm_array_to_list(axis)
+        exclude = 0 if not bool(node['node'].attrs.exclude) else 1
+        keepdims = 0 if not bool(node['node'].attrs.keepdims) else 1
+        if exclude:
+            all_axis = list(range(len(shape)))
+            axis = set(all_axis) - set(axis)
+
+        node = onnx.helper.make_node(cls.__name__,
+                                     node['input_names'],
+                                     node['output_names'],
+                                     **{"axes": axis,
+                                        "keepdims": keepdims
+                                        })
+        model_container.add_nodes([node])
+
+
+class Pad(OpConverter):
+    """ Operator converter for Pad.
+    """
+    @classmethod
+    def convert_attributes(cls, attrs):
+        before = []
+        after = []
+        for axis_pads in attrs.pad_width:
+            before.append(axis_pads[0])
+            after.append(axis_pads[1])
+        pads = before + after
+        pads = numpy.asarray(pads, dtype=pads[0].dtype)
+        return {
+            'pads': pads,
+            'mode': attrs.get_str('pad_mode'),
+            'constant_value': attrs.pad_value
+        }
+
+    @classmethod
+    def convert(cls, node, model_container, node_list):
+        """Converts Relay operator Pad to ONNX operator.
+           Relay operator accepts pads as attribute but ONNX operator
+           accepts it as a input.
+        """
+
+        attrs = cls.convert_attributes(node['node'].attrs)
+        pads = numpy.asarray(attrs['pads'], dtype=attrs['pads'][0].dtype).astype(numpy.int64)
+        input_name = 'pads_{}'.format(node['output_names'][0])
+
+        input = onnx.helper.make_tensor_value_info(input_name,
+                                                   onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[pads.dtype],
+                                                   shape=pads.shape)
+        model_container.add_inputs([input])
+        shape_tensor = numpy_helper.from_array(pads, input_name)
+        model_container.add_initializers([shape_tensor])
+
+        # create value tensor
+        value = numpy.dtype(node['types'][0].dtype).type(attrs['constant_value'])
+        input_value_name = 'value_{}'.format(node['output_names'][0])
+        node = onnx.helper.make_node(cls.__name__, [node['input_names'][0], input_name, input_value_name],
+                                     node['output_names'])
+        model_container.add_nodes([node])
+
+        input_value = onnx.helper.make_tensor_value_info(input_value_name,
+                                                   onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[value.dtype],
+                                                   shape=value.shape)
+        model_container.add_inputs([input_value])
+        value_tensor = numpy_helper.from_array(value, input_value_name)
+        model_container.add_initializers([value_tensor])
+
+
+class Softmax(OpConverter):
+    """ Operator converter for SoftMax.
+    """
+    @classmethod
+    def convert_attributes(cls, attrs):
+        return {
+            'axis': attrs.axis,
+        }
+
+
+class Squeeze(OpConverter):
+    """ Operator converter for Squeeze.
+    """
+    @classmethod
+    def convert_attributes(cls, attrs):
+        return {
+            'axes': attrs.axis,
+        }
+
+    @classmethod
+    def convert(cls, node, model_container, node_list):
+
+        input_node = node_list[node['inputs'][0][0]]
+        shape = input_node['types'][0].shape
+        axis = node['node'].attrs.get_int("axis")
+        if not axis:
+            axis = []
+            for axis_idx, val in enumerate(shape):
+                if val.value == 1:
+                    axis.append(axis_idx)
+        else:
+            axis = node['node'].attrs.get_int_tuple("axis")
+
+        node = onnx.helper.make_node(cls.__name__,
+                                     node['input_names'],
+                                     node['output_names'],
+                                     **{"axes": axis})
+        model_container.add_nodes([node])
+
 
 
 relay_to_onnx_op_mapping = {
@@ -219,7 +377,11 @@ relay_to_onnx_op_mapping = {
     'concatenate': Concat,
     'dropout': Dropout,
     'avg_pool2d': AveragePool,
-    'divide': rename('Div')
+    'divide': rename('Div'),
+    'mean': ReduceMean,
+    'pad': Pad,
+    'softmax': Softmax,
+    'squeeze': Squeeze
 }
 
 
