@@ -267,7 +267,7 @@ def test_batch_norm():
             relay_res = run_relay(func, (x_data, gamma, beta, moving_mean, moving_var))
             onnx_res = run_onnx(func_to_onnx(func, 'test_batch_norm'), [x_data, gamma,beta, moving_mean, moving_var])
 
-            tol = 1e-3  # TODO - high tolerance
+            tol = 1e-3
             tvm.testing.assert_allclose(relay_res, onnx_res, rtol=tol, atol=tol)
 
     verify_batch_norm(axis=1)
@@ -341,6 +341,96 @@ def test_mean():
     verify_mean((3, 2, 1), 1, False, True)
 
 
+def test_strided_slice():
+
+    def verify_strided_slice(dshape, begin, end, strides):
+        x = relay.var("x", relay.TensorType(dshape, "float32"))
+        z = relay.strided_slice(x, begin=begin, end=end, strides=strides)
+        func = relay.Function([x], z)
+        x_data = np.random.uniform(size=dshape).astype("float32")
+        relay_res = run_relay(func, (x_data,))
+        onnx_res = run_onnx(func_to_onnx(func, 'test_strided_slice'), [x_data])
+        tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+
+    verify_strided_slice((3, 4, 3), [1, 1, 0], [4, 4, 3], None)
+    verify_strided_slice((3, 4, 3), [0, 0, 0], [4, -5, 4], [1, -1, 2])
+    verify_strided_slice((3, 4, 3), [1, 1, 0], [4, 4, 3], [2, 1, 1])
+    verify_strided_slice((3, 4, 3), [1, -1, 0], [4, -5, 3], [2, -1, 1])
+    verify_strided_slice((3, 4, 3), [1, 0, 0], [2, 2, 3], [1, 1, 2])
+    verify_strided_slice((3, 4, 3), [1, -1, 0], [2, -3, 3], [1, -1, 1])
+
+    verify_strided_slice((3, 4, 3), [1, 1, 0], [4, 1000, 3], None)
+    verify_strided_slice((3, 4, 3), [1, 1, 0], [4, 4], None)
+    verify_strided_slice((3, 4, 3), [1, 1], [4, 4, 3], None)
+
+    # TODO - test cases below fails for TVM itself error -strided_slice get empty slice at axis 1
+    # verify_strided_slice((3, 4, 3), [1, 1, 0], [4, 4], [1, -1, 1])
+    # verify_strided_slice((3, 4, 3), [1, 1], [4, 4, 3], [1, 1, 2])
+    # verify_strided_slice((3, 4, 3), [1, 1, 0], [4, 4], [1, -1, 1])
+    # verify_strided_slice((3, 4, 3), [1, 1], [4, 4, 3], [1, 1, 2])
+
+
+def test_cmp_type():
+    for op, ref in ((relay.greater, np.greater),
+                    (relay.less, np.less),
+                    (relay.equal, np.equal)
+                    ):
+
+        x_shape = (10, 4)
+        y_shape = (5, 10, 1)
+        t1 = relay.TensorType(x_shape)
+        t2 = relay.TensorType(y_shape)
+        x = relay.var("x", t1)
+        y = relay.var("y", t2)
+        z = op(x, y)
+        x_data = np.random.rand(*x_shape).astype(t1.dtype)
+        y_data = np.random.rand(*y_shape).astype(t2.dtype)
+        func = relay.Function([x, y], z)
+
+        relay_res = run_relay(func, (x_data, y_data))
+        onnx_res = run_onnx(func_to_onnx(func, 'test_cmp_op'), [x_data, y_data])
+        tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+
+
+def test_unary_identity():
+    for dtype in ["int16", "float32", "float64"]:
+        for op, ref in [(relay.zeros_like, np.zeros_like),
+                        (relay.ones_like, np.ones_like)]:
+            shape = (8, 9, 4)
+            x = relay.var("x", relay.TensorType(shape, dtype))
+            y = op(x)
+            func = relay.Function([x, ], y)
+
+            x_data = np.random.rand(*shape).astype(dtype)
+            relay_res = run_relay(func, (x_data,))
+            onnx_res = run_onnx(func_to_onnx(func, 'test_unary_identity'), [x_data])
+            tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+
+
+def test_binary_op():
+    def check_binary_op(opfunc, dtype):
+        t1 = relay.TensorType((5, 10, 5))
+        t2 = relay.TensorType((5, 10, 5))
+        x = relay.var("x", t1, dtype=dtype)
+        y = relay.var("y", t2, dtype=dtype)
+        z = opfunc(x, y)
+        x_data = np.random.rand(5, 10, 5).astype(dtype)
+        y_data = np.random.rand(5, 10, 5).astype(dtype)
+        func = relay.Function([x, y], z)
+
+        relay_res = run_relay(func, (x_data, y_data))
+        onnx_res = run_onnx(func_to_onnx(func, 'test_binary_op'), [x_data, y_data])
+        tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+
+    for opfunc, ref in [(relay.add, np.add),
+                        (relay.subtract, np.subtract),
+                        (relay.multiply, np.multiply),
+                        (relay.divide, np.divide),
+                        ]:
+        for dtype in ['float32']:
+            check_binary_op(opfunc, dtype)
+
+
 if __name__ == '__main__':
     test_add()
     test_bias_add()
@@ -356,3 +446,6 @@ if __name__ == '__main__':
     test_mean()
     test_sofmax()
     test_squeeze()
+    test_strided_slice()
+    test_cmp_type()
+    test_binary_op()

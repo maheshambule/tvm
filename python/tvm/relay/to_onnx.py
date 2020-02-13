@@ -24,8 +24,19 @@ from onnx import numpy_helper
 from tvm.autotvm.graph_tuner.utils.traverse_graph import _expr2graph_impl
 from tvm.relay.expr import Call, TupleGetItem, Var, Constant, Tuple
 
+
 def tvm_array_to_list(arr):
     return tuple(x.value for x in arr)
+
+
+def add_input(data, name, model_container):
+    tensor_value_info = onnx.helper.make_tensor_value_info(name,
+                                                           onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[data.dtype],
+                                                           shape=data.shape)
+    model_container.add_inputs([tensor_value_info])
+    data_tensor = numpy_helper.from_array(data, name)
+    model_container.add_initializers([data_tensor])
+
 
 class OpConverter(object):
     """ Operator converter Base Class.
@@ -68,7 +79,6 @@ class Reshape(object):
 
         shape = numpy.asarray([a.value for a in node['node'].attrs.newshape],
                               dtype=numpy.int64)
-                              #dtype=node['node'].attrs.newshape[0].dtype)
         input_name = 'shape{}'.format(node['output_names'][0])
         node = onnx.helper.make_node(cls.__name__, [node['input_names'][0], input_name],
                                      node['output_names'])
@@ -101,7 +111,7 @@ class MaxPool(OpConverter):
     @classmethod
     def convert_attributes(cls, attrs):
         return {
-            'pads': attrs.get_int_tuple("padding"),
+            'pads': attrs.get_int_tuple("padding") + attrs.get_int_tuple("padding"),
             'strides': attrs.get_int_tuple("strides"),
             'kernel_shape': attrs.get_int_tuple("pool_size"),
         }
@@ -293,31 +303,18 @@ class Pad(OpConverter):
            Relay operator accepts pads as attribute but ONNX operator
            accepts it as a input.
         """
-
         attrs = cls.convert_attributes(node['node'].attrs)
-        pads = numpy.asarray(attrs['pads'], dtype=attrs['pads'][0].dtype).astype(numpy.int64)
+
+        data = numpy.asarray(attrs['pads'], dtype=attrs['pads'][0].dtype).astype(numpy.int64)
         input_name = 'pads_{}'.format(node['output_names'][0])
-
-        input = onnx.helper.make_tensor_value_info(input_name,
-                                                   onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[pads.dtype],
-                                                   shape=pads.shape)
-        model_container.add_inputs([input])
-        shape_tensor = numpy_helper.from_array(pads, input_name)
-        model_container.add_initializers([shape_tensor])
-
-        # create value tensor
         value = numpy.dtype(node['types'][0].dtype).type(attrs['constant_value'])
         input_value_name = 'value_{}'.format(node['output_names'][0])
+        add_input(data, input_name, model_container)
+        add_input(value, input_value_name, model_container)
+
         node = onnx.helper.make_node(cls.__name__, [node['input_names'][0], input_name, input_value_name],
                                      node['output_names'])
         model_container.add_nodes([node])
-
-        input_value = onnx.helper.make_tensor_value_info(input_value_name,
-                                                   onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[value.dtype],
-                                                   shape=value.shape)
-        model_container.add_inputs([input_value])
-        value_tensor = numpy_helper.from_array(value, input_value_name)
-        model_container.add_initializers([value_tensor])
 
 
 class Softmax(OpConverter):
@@ -341,7 +338,6 @@ class Squeeze(OpConverter):
 
     @classmethod
     def convert(cls, node, model_container, node_list):
-
         input_node = node_list[node['inputs'][0][0]]
         shape = input_node['types'][0].shape
         axis = node['node'].attrs.get_int("axis")
@@ -359,6 +355,102 @@ class Squeeze(OpConverter):
                                      **{"axes": axis})
         model_container.add_nodes([node])
 
+
+class Slice(OpConverter):
+    """ Operator converter for Slice.
+    """
+    @classmethod
+    def convert_attributes(cls, attrs):
+        return {
+            'starts': attrs.get_int_tuple('begin'),
+            'ends': attrs.get_int_tuple('end'),
+            'steps': attrs.get_int_tuple('strides')
+        }
+
+    @classmethod
+    def convert(cls, node, model_container, node_list):
+        attrs = cls.convert_attributes(node['node'].attrs)
+
+        input_node = node_list[node['inputs'][0][0]]
+        shape = input_node['types'][0].shape
+        starts = list(attrs['starts'])
+        ends = list(attrs['ends'])
+        for i in range(len(starts), len(shape)):
+            starts.append(0)
+        for i in range(len(ends), len(shape)):
+            ends.append(shape[i] + 1)
+
+        starts = numpy.asarray(starts).astype(numpy.int64)
+        starts_name = 'starts_{}'.format(node['output_names'][0])
+        add_input(starts, starts_name, model_container)
+
+        ends = numpy.asarray(ends).astype(numpy.int64)
+        ends_name = 'ends_{}'.format(node['output_names'][0])
+        add_input(ends, ends_name, model_container)
+
+        input_names = node['input_names'] + [starts_name, ends_name]
+
+        if attrs['steps']:
+
+            axes = list(range(len(shape)))
+            attrs['axes'] = axes
+            assert len(axes) == len(attrs['steps']), "axes and steps should be of same size"
+
+            steps = numpy.asarray(attrs['steps']).astype(numpy.int64)
+            steps_name = 'steps_{}'.format(node['output_names'][0])
+            add_input(steps, steps_name, model_container)
+
+            axes = numpy.asarray(attrs['axes']).astype(numpy.int64)
+            axes_name = 'axes_{}'.format(node['output_names'][0])
+            add_input(axes, axes_name, model_container)
+
+            input_names = input_names + [axes_name, steps_name]
+
+        slice_node = onnx.helper.make_node(cls.__name__,
+                                           input_names,
+                                           node['output_names'],
+                                           )
+        model_container.add_nodes([slice_node])
+
+
+class ConstantOfShapeZeros(OpConverter):
+    """ Operator converter for ConstantOfShape.
+    """
+    @classmethod
+    def convert_attributes(cls, attrs):
+        return {
+            'value': 0
+        }
+
+    @classmethod
+    def convert(cls, node, model_container, node_list):
+        attrs = cls.convert_attributes(node['node'].attrs)
+        input_node = node_list[node['inputs'][0][0]]
+        shape = input_node['types'][0].shape
+        dtype = input_node['types'][0].dtype
+        input_shape_name = 'shape_{}'.format(node['output_names'][0])
+        shape = numpy.asarray(shape).astype(numpy.int64)
+        add_input(shape, input_shape_name, model_container)
+
+        tensor_value = onnx.helper.make_tensor("value",
+                                               onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[numpy.dtype(dtype)],
+                                               [1], [attrs['value']])
+
+        node = onnx.helper.make_node('ConstantOfShape',
+                                     [input_shape_name],
+                                     node['output_names'],
+                                     **{'value': tensor_value})
+        model_container.add_nodes([node])
+
+
+class ConstantOfShapeOnes(ConstantOfShapeZeros):
+    """ Operator converter for ConstantOfShape.
+    """
+    @classmethod
+    def convert_attributes(cls, attrs):
+        return {
+            'value': 1
+        }
 
 
 relay_to_onnx_op_mapping = {
@@ -381,7 +473,15 @@ relay_to_onnx_op_mapping = {
     'mean': ReduceMean,
     'pad': Pad,
     'softmax': Softmax,
-    'squeeze': Squeeze
+    'squeeze': Squeeze,
+    'strided_slice': Slice,
+    'greater': rename('Greater'),
+    'less': rename('Less'),
+    'equal': rename('Equal'),
+    'zeros_like': ConstantOfShapeZeros,
+    'ones_like': ConstantOfShapeOnes,
+    'subtract': rename('Sub'),
+    'multiply': rename('Mul'),
 }
 
 
@@ -467,15 +567,12 @@ class RelayToONNXConverter(object):
         return 'node_{0}'.format(input[0])
 
     def _add_node(self, node_entry, idx):
-        """Convert Relay operator node to ONNX opeartor and add it to container nodes list"""
+        """Convert Relay operator node to ONNX operator and add it to container nodes list"""
         if node_entry['op'] not in relay_to_onnx_op_mapping and not node_entry['op'].startswith('func_'):
             raise NotImplementedError("Currently the operator '{0}' is "
                                       "not supported.".format(node_entry['op']))
 
-        if not node_entry['op'].startswith('func_'):
-            converter = relay_to_onnx_op_mapping[node_entry['op']]()
-        else:
-            converter = OpConverter()
+        converter = relay_to_onnx_op_mapping[node_entry['op']]()
         node_entry['output_names'] = [self._tuple_to_name([idx, 0, 0])]
         node_entry['input_names'] = []
         for input_idx_tuple in node_entry['inputs']:
