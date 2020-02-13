@@ -19,14 +19,14 @@
 import numpy as np
 import tvm
 from tvm import relay
-from tvm.relay.converter import onnx
+from tvm.relay.converter import to_onnx
 import onnxruntime as rt
 
 
 def func_to_onnx(func, name):
     mod = relay.Module()
     mod['main'] = func
-    onnx_model = onnx.to_onnx(mod, {}, name, None)
+    onnx_model = to_onnx(mod, {}, name, None)
     return onnx_model.SerializeToString()
 
 
