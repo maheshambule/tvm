@@ -30,9 +30,8 @@ def tvm_array_to_list(arr):
 
 
 def add_input(data, name, model_container):
-    tensor_value_info = onnx.helper.make_tensor_value_info(name,
-                                                           onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[data.dtype],
-                                                           shape=data.shape)
+    dtype = onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[data.dtype]
+    tensor_value_info = onnx.helper.make_tensor_value_info(name, dtype, shape=data.shape)
     model_container.add_inputs([tensor_value_info])
     data_tensor = numpy_helper.from_array(data, name)
     model_container.add_initializers([data_tensor])
@@ -279,8 +278,7 @@ class ReduceMean(OpConverter):
                                      node['input_names'],
                                      node['output_names'],
                                      **{"axes": axis,
-                                        "keepdims": keepdims
-                                        })
+                                        "keepdims": keepdims})
         model_container.add_nodes([node])
 
 
@@ -318,8 +316,8 @@ class Pad(OpConverter):
         add_input(data, input_name, model_container)
         add_input(value, input_value_name, model_container)
 
-        node = onnx.helper.make_node(cls.__name__, [node['input_names'][0], input_name, input_value_name],
-                                     node['output_names'])
+        input_names = [node['input_names'][0], input_name, input_value_name]
+        node = onnx.helper.make_node(cls.__name__, input_names, node['output_names'])
         model_container.add_nodes([node])
 
 
@@ -416,7 +414,7 @@ class Slice(OpConverter):
 
         slice_node = onnx.helper.make_node(cls.__name__,
                                            input_names,
-                                           node['output_names'],
+                                           node['output_names']
                                            )
         model_container.add_nodes([slice_node])
 
@@ -441,8 +439,8 @@ class ConstantOfShapeZeros(OpConverter):
         shape = numpy.asarray(shape).astype(numpy.int64)
         add_input(shape, input_shape_name, model_container)
 
-        tensor_value = onnx.helper.make_tensor("value",
-                                               onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[numpy.dtype(dtype)],
+        dtype = onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[numpy.dtype(dtype)]
+        tensor_value = onnx.helper.make_tensor("value", dtype,
                                                [1], [attrs['value']])
 
         node = onnx.helper.make_node('ConstantOfShape',
@@ -490,8 +488,7 @@ relay_to_onnx_op_mapping = {
     'equal': rename('Equal'),
     'zeros_like': ConstantOfShapeZeros,
     'ones_like': ConstantOfShapeOnes,
-    'subtract': rename('Sub'),
-    'multiply': rename('Mul'),
+    'subtract': rename('Sub')
 }
 
 
@@ -560,7 +557,8 @@ class RelayToONNXConverter(object):
             elif isinstance(node, Constant):
                 self._add_constant_input(node_entry, idx)
             elif isinstance(node, (TupleGetItem, Tuple)):
-                out_idx = idx - 1  # TODO: Need to work on this. No equivalent ONNX operator found yet
+                out_idx = idx - 1  # TODO: Need to work on this.
+                # No equivalent ONNX operator found yet
             else:
                 raise NotImplementedError("Relay Node of type {0} is not "
                                           "implemented yet".format(type(node)))
@@ -578,7 +576,7 @@ class RelayToONNXConverter(object):
 
     def _add_node(self, node_entry, idx):
         """Convert Relay operator node to ONNX operator and add it to container nodes list"""
-        if node_entry['op'] not in relay_to_onnx_op_mapping and not node_entry['op'].startswith('func_'):
+        if node_entry['op'] not in relay_to_onnx_op_mapping:
             raise NotImplementedError("Currently the operator '{0}' is "
                                       "not supported.".format(node_entry['op']))
 
