@@ -53,7 +53,3 @@ python3 -m pytest -v tests/python/frontend/caffe2
 
 echo "Running relay DarkNet frontend test..."
 python3 -m pytest -v tests/python/frontend/darknet
-
-
-echo "Running relay to_onnx test..."
-python3 -m pytest -v tests/python/frontend/to_onnx
