@@ -41,6 +41,7 @@ def add_input(data, name, model_container):
 class OpConverter(object):
     """ Operator converter Base Class.
     """
+
     @classmethod
     def convert_attributes(cls, attrs):
         """convert Relay attributes to ONNX attributes.
@@ -83,17 +84,13 @@ class Reshape(object):
         node = onnx.helper.make_node(cls.__name__, [node['input_names'][0], input_name],
                                      node['output_names'])
         model_container.add_nodes([node])
-        input = onnx.helper.make_tensor_value_info(input_name,
-                                                   onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[shape.dtype],
-                                                   shape=shape.shape)
-        model_container.add_inputs([input])
-        shape_tensor = numpy_helper.from_array(shape, input_name)
-        model_container.add_initializers([shape_tensor])
+        add_input(shape, input_name, model_container)
 
 
 class Conv(OpConverter):
     """ Operator converter for Conv.
     """
+
     @classmethod
     def convert_attributes(cls, attrs):
         return {
@@ -108,6 +105,7 @@ class Conv(OpConverter):
 class MaxPool(OpConverter):
     """ Operator converter for MaxPool.
     """
+
     @classmethod
     def convert_attributes(cls, attrs):
         return {
@@ -120,6 +118,7 @@ class MaxPool(OpConverter):
 class Transpose(OpConverter):
     """ Operator converter for Transpose.
     """
+
     @classmethod
     def convert_attributes(cls, attrs):
         return {'perm': attrs.get_int_tuple("axes")} if attrs["axes"] else {}
@@ -128,6 +127,7 @@ class Transpose(OpConverter):
 class MatMul(OpConverter):
     """ Operator converter for MatMul.
     """
+
     @classmethod
     def convert(cls, node, model_container, node_list):
         output_name = 'inter{}'.format(node['output_names'][0])
@@ -145,6 +145,7 @@ class MatMul(OpConverter):
 class Flatten(OpConverter):
     """ Operator converter for Flatten.
     """
+
     @classmethod
     def convert_attributes(cls, attrs):
         return {
@@ -155,50 +156,52 @@ class Flatten(OpConverter):
 class BatchNormalization(OpConverter):
     """ Operator converter for BatchNormalization.
     """
+
     @classmethod
     def convert_attributes(cls, attrs):
         return {
             'epsilon': float(attrs.get_str('epsilon')),
             'axis': float(attrs.get_int('axis')),
-           # 'spatial': 1  # TODO - version based support
+            # 'spatial': 1  # TODO - version based support
         }
 
     @classmethod
     def convert(cls, node, model_container, node_list):
-            """Converts Relay operator batch_norm to ONNX operator.
-               Relay operator has property axis to handle data in NHWC format.
-            """
-            attrs = cls.convert_attributes(node['node'].attrs)
-            transpose_out_name = node['input_names'][0]
-            output_names = node['output_names']
+        """Converts Relay operator batch_norm to ONNX operator.
+           Relay operator has property axis to handle data in NHWC format.
+        """
+        attrs = cls.convert_attributes(node['node'].attrs)
+        transpose_out_name = node['input_names'][0]
+        output_names = node['output_names']
 
-            # axis==3 means channel is specified along the 3rd axis
-            if attrs['axis'] == 3:
-                transpose_out_name = 'transpose_{}'.format(node['output_names'][0])
-                node_transposed = onnx.helper.make_node(Transpose.__name__,
-                                                        [node['input_names'][0]],
-                                                        [transpose_out_name],
-                                                        **{'perm': [0, 3, 1, 2]})
-                model_container.add_nodes([node_transposed])
-                output_names = ['batch_norm_{}'.format(node['output_names'][0])]
+        # axis==3 means channel is specified along the 3rd axis
+        if attrs['axis'] == 3:
+            transpose_out_name = 'transpose_{}'.format(node['output_names'][0])
+            node_transposed = onnx.helper.make_node(Transpose.__name__,
+                                                    [node['input_names'][0]],
+                                                    [transpose_out_name],
+                                                    **{'perm': [0, 3, 1, 2]})
+            model_container.add_nodes([node_transposed])
+            output_names = ['batch_norm_{}'.format(node['output_names'][0])]
 
-            batch_norm_node = onnx.helper.make_node(cls.__name__,
-                                                    [transpose_out_name] + node['input_names'][1:],
+        batch_norm_node = onnx.helper.make_node(cls.__name__,
+                                                [transpose_out_name] + node['input_names'][1:],
+                                                output_names,
+                                                **{'epsilon': attrs['epsilon']})
+        model_container.add_nodes([batch_norm_node])
+
+        if attrs['axis'] == 3:
+            node_transposed = onnx.helper.make_node(Transpose.__name__,
                                                     output_names,
-                                                    **{'epsilon': attrs['epsilon']})
-            model_container.add_nodes([batch_norm_node])
-
-            if attrs['axis'] == 3:
-                node_transposed = onnx.helper.make_node(Transpose.__name__,
-                                                        output_names,
-                                                        node['output_names'],
-                                                        **{'perm': [0, 2, 3, 1]})
-                model_container.add_nodes([node_transposed])
+                                                    node['output_names'],
+                                                    **{'perm': [0, 2, 3, 1]})
+            model_container.add_nodes([node_transposed])
 
 
 class Dropout(OpConverter):
     """ Operator converter for Dropout.
     """
+
     @classmethod
     def convert_attributes(cls, attrs):
         return {
@@ -214,6 +217,7 @@ class AveragePool(MaxPool):
 class Concat(OpConverter):
     """ Operator converter for Concat.
     """
+
     @classmethod
     def convert_attributes(cls, attrs):
         return {
@@ -238,7 +242,7 @@ class BiasAdd(OpConverter):
             unsqueeze_node = onnx.helper.make_node('Unsqueeze',
                                                    [node['input_names'][1]],
                                                    [output_name],
-                                                   **{'axes': tuple(range(1, new_axes+1))})
+                                                   **{'axes': tuple(range(1, new_axes + 1))})
             model_container.add_nodes([unsqueeze_node])
         else:
             output_name = node['input_names'][1]
@@ -251,6 +255,7 @@ class BiasAdd(OpConverter):
 class ReduceMean(OpConverter):
     """ Operator converter for ReduceMean.
     """
+
     @classmethod
     def convert_attributes(cls, attrs):
         return {
@@ -282,6 +287,7 @@ class ReduceMean(OpConverter):
 class Pad(OpConverter):
     """ Operator converter for Pad.
     """
+
     @classmethod
     def convert_attributes(cls, attrs):
         before = []
@@ -320,6 +326,7 @@ class Pad(OpConverter):
 class Softmax(OpConverter):
     """ Operator converter for SoftMax.
     """
+
     @classmethod
     def convert_attributes(cls, attrs):
         return {
@@ -330,6 +337,7 @@ class Softmax(OpConverter):
 class Squeeze(OpConverter):
     """ Operator converter for Squeeze.
     """
+
     @classmethod
     def convert_attributes(cls, attrs):
         return {
@@ -359,6 +367,7 @@ class Squeeze(OpConverter):
 class Slice(OpConverter):
     """ Operator converter for Slice.
     """
+
     @classmethod
     def convert_attributes(cls, attrs):
         return {
@@ -391,7 +400,6 @@ class Slice(OpConverter):
         input_names = node['input_names'] + [starts_name, ends_name]
 
         if attrs['steps']:
-
             axes = list(range(len(shape)))
             attrs['axes'] = axes
             assert len(axes) == len(attrs['steps']), "axes and steps should be of same size"
@@ -416,6 +424,7 @@ class Slice(OpConverter):
 class ConstantOfShapeZeros(OpConverter):
     """ Operator converter for ConstantOfShape.
     """
+
     @classmethod
     def convert_attributes(cls, attrs):
         return {
@@ -446,6 +455,7 @@ class ConstantOfShapeZeros(OpConverter):
 class ConstantOfShapeOnes(ConstantOfShapeZeros):
     """ Operator converter for ConstantOfShape.
     """
+
     @classmethod
     def convert_attributes(cls, attrs):
         return {

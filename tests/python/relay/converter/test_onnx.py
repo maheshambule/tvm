@@ -19,20 +19,20 @@
 import numpy as np
 import tvm
 from tvm import relay
-from tvm.relay import to_onnx
+from tvm.relay.converter import onnx
 import onnxruntime as rt
 
 
 def func_to_onnx(func, name):
     mod = relay.Module()
     mod['main'] = func
-    onnx_model = to_onnx.to_onnx(mod, {}, name, None)
+    onnx_model = onnx.to_onnx(mod, {}, name, None)
     return onnx_model.SerializeToString()
 
 
 def run_onnx(onnx_model, input_data):
     sess = rt.InferenceSession(onnx_model)
-    input_names ={}
+    input_names = {}
     for input, data in zip(sess.get_inputs(), input_data):
         input_names[input.name] = data
     output_name = sess.get_outputs()[0].name
@@ -48,6 +48,12 @@ def run_relay(func, data_tuple):
     return relay_res.asnumpy()
 
 
+def verify_results(relay_func, indata, test_name, rtol=1e-7, atol=0):
+    relay_res = run_relay(relay_func, indata)
+    onnx_res = run_onnx(func_to_onnx(relay_func, test_name), indata)
+    np.testing.assert_allclose(relay_res, onnx_res, rtol=rtol, atol=atol)
+
+
 def test_add():
     dtype = 'float32'
     t1 = relay.TensorType((5, 10, 5))
@@ -60,10 +66,7 @@ def test_add():
     x_data = np.random.rand(5, 10, 5).astype(dtype)
     y_data = np.random.rand(5, 10, 5).astype(dtype)
 
-    relay_res = run_relay(func, (x_data, y_data))
-    onnx_res = run_onnx(func_to_onnx(func, 'add'), [x_data, y_data])
-
-    np.testing.assert_allclose(relay_res, onnx_res)
+    verify_results(func, [x_data, y_data], 'test_add')
 
 
 def test_bias_add():
@@ -79,19 +82,15 @@ def test_bias_add():
         x_data = np.random.uniform(size=xshape).astype(dtype)
         y_data = np.random.uniform(size=bshape).astype(dtype)
 
-        relay_res = run_relay(func, (x_data, y_data))
-        onnx_res = run_onnx(func_to_onnx(func, 'test_bias_add'), [x_data, y_data])
-
-        np.testing.assert_allclose(relay_res, onnx_res, rtol=rtol)
+        verify_results(func, [x_data, y_data], 'test_bias_add', rtol=rtol)
 
 
 def test_conv2d():
-    def verify_conv2d(dtype, out_dtype, scale, dshape, kshape,
-                        padding=(1, 1),
-                        groups=1,
-                        dilation=(1, 1),
-                        **attrs):
-
+    def verify_conv2d(dtype, scale, dshape, kshape,
+                      padding=(1, 1),
+                      groups=1,
+                      dilation=(1, 1),
+                      **attrs):
         x = relay.var("x", shape=dshape, dtype=dtype)
         w = relay.var("w", dtype=dtype)
         y = relay.nn.conv2d(x, w,
@@ -102,56 +101,53 @@ def test_conv2d():
         func = relay.Function([x, w], y)
         data = np.random.uniform(-scale, scale, size=dshape).astype(dtype)
         kernel = np.random.uniform(-scale, scale, size=kshape).astype(dtype)
-        relay_res = run_relay(func, (data, kernel))
-        onnx_res = run_onnx(func_to_onnx(func, 'test_conv2d'), [data, kernel])
-
-        tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+        verify_results(func, [data, kernel], 'test_conv2d', rtol=1e-5, atol=1e-5)
 
     dshape = (1, 32, 18, 18)
     kshape = (32, 1, 3, 3)
-    verify_conv2d("float32", "float32", 1, dshape, kshape,
-                    padding=(1, 1), channels=32, groups=32, kernel_size=(3, 3))
+    verify_conv2d("float32", 1, dshape, kshape,
+                  padding=(1, 1), channels=32, groups=32, kernel_size=(3, 3))
 
     dshape = (1, 32, 18, 18)
     kshape = (32, 4, 3, 3)
-    verify_conv2d("float32", "float32", 1, dshape, kshape,
-                    padding=(1, 1), channels=32, groups=8, kernel_size=(3, 3))
+    verify_conv2d("float32", 1, dshape, kshape,
+                  padding=(1, 1), channels=32, groups=8, kernel_size=(3, 3))
 
     # also group conv2d
     dshape = (1, 32, 18, 18)
     kshape = (64, 1, 3, 3)
-    verify_conv2d("float32", "float32", 1, dshape, kshape,
-                    padding=(1, 1), channels=64, groups=32, kernel_size=(3, 3))
+    verify_conv2d("float32", 1, dshape, kshape,
+                  padding=(1, 1), channels=64, groups=32, kernel_size=(3, 3))
 
     # normal conv2d
     dshape = (1, 3, 224, 224)
     kshape = (10, 3, 3, 3)
-    verify_conv2d("float32", "float32", 1, dshape, kshape,
-                    padding=(1, 1), channels=10, kernel_size=(3, 3))
+    verify_conv2d("float32", 1, dshape, kshape,
+                  padding=(1, 1), channels=10, kernel_size=(3, 3))
 
     dshape = (1, 3, 224, 224)
     kshape = (10, 3, 3, 3)
-    verify_conv2d("float32", "float32", 1, dshape, kshape,
-                    padding=(2, 2), channels=10, kernel_size=(3, 3))
+    verify_conv2d("float32", 1, dshape, kshape,
+                  padding=(2, 2), channels=10, kernel_size=(3, 3))
 
     dshape = (1, 3, 18, 18)
     kshape = (10, 3, 3, 3)
-    verify_conv2d("float32", "float32", 1, dshape, kshape,
-                    padding=(1, 1), channels=10, kernel_size=(3, 3), dilation=(3, 3))
+    verify_conv2d("float32", 1, dshape, kshape,
+                  padding=(1, 1), channels=10, kernel_size=(3, 3), dilation=(3, 3))
 
     dshape = (1, 3, 18, 18)
     kshape = (10, 3, 2, 2)
-    verify_conv2d("float32", "float32", 1, dshape, kshape,
-                    padding=(2, 2), channels=10, kernel_size=(2, 2), dilation=(1, 1))
+    verify_conv2d("float32", 1, dshape, kshape,
+                  padding=(2, 2), channels=10, kernel_size=(2, 2), dilation=(1, 1))
 
     dshape = (1, 3, 18, 18)
     kshape = (10, 3, 4, 4)
-    verify_conv2d("float32", "float32", 1, dshape, kshape,
-                    padding=(1, 1), channels=10, kernel_size=(4, 4))
+    verify_conv2d("float32", 1, dshape, kshape,
+                  padding=(1, 1), channels=10, kernel_size=(4, 4))
 
     dshape = (1, 3, 18, 18)
     kshape = (10, 3, 4, 4)
-    verify_conv2d("float32", "float32", 1, dshape, kshape,
+    verify_conv2d("float32", 1, dshape, kshape,
                   padding=(1, 1), channels=10, kernel_size=(4, 4))
 
 
@@ -162,9 +158,7 @@ def test_reshape():
 
         func = relay.Function([x], z)
         x_data = np.random.uniform(low=-1, high=1, size=shape).astype("float32")
-        relay_res = run_relay(func, (x_data,))
-        onnx_res = run_onnx(func_to_onnx(func, 'test_reshape'), [x_data])
-        tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+        verify_results(func, [x_data], 'test_reshape', rtol=1e-5, atol=1e-5)
 
     verify_reshape((2, 3, 4), tuple(np.array([4, 2, 3], dtype=np.int64)))
     verify_reshape((2, 3, 4), tuple(np.array([2, 0, 0], dtype=np.int64)))
@@ -176,12 +170,9 @@ def test_transpose():
     def verify_reshape(shape, newshape):
         x = relay.var("x", relay.TensorType(shape, "float32"))
         z = relay.transpose(x, newshape)
-
         func = relay.Function([x], z)
         x_data = np.random.uniform(low=-1, high=1, size=shape).astype("float32")
-        relay_res = run_relay(func, (x_data,))
-        onnx_res = run_onnx(func_to_onnx(func, 'test_transpose'), [x_data])
-        tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+        verify_results(func, [x_data], 'test_transpose', rtol=1e-5, atol=1e-5)
 
     verify_reshape((1, 2, 3, 4), (0, 2, 3, 1))
     verify_reshape((1, 2, 3, 4), (0, 3, 2, 1))
@@ -191,13 +182,10 @@ def test_dense():
     def verify_dense(d_shape, w_shape):
         data = relay.var("data", relay.TensorType(d_shape, "float32"))
         weight = relay.var("weight", relay.TensorType(w_shape, "float32"))
-
         func = relay.Function([data, weight], relay.nn.dense(data, weight))
         x_data = np.random.uniform(size=d_shape).astype("float32")
         w_data = np.random.uniform(size=w_shape).astype("float32")
-        relay_res = run_relay(func, (x_data,w_data))
-        onnx_res = run_onnx(func_to_onnx(func, 'test_dense'), [x_data, w_data])
-        tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+        verify_results(func, [x_data, w_data], 'test_dense', rtol=1e-5, atol=1e-5)
 
     verify_dense((1, 8), (16, 8))
     verify_dense((1, 4), (3, 4))
@@ -208,12 +196,9 @@ def test_max_pool():
         x = relay.var("x", relay.TensorType(x_shape, "float32"))
         y = tvm.relay.nn.max_pool2d(x, pool_size=pool_size, strides=strides, padding=padding,
                                     ceil_mode=ceil_mode)
-
         func = relay.Function([x], y)
         x_data = np.random.uniform(size=x_shape).astype("float32")
-        relay_res = run_relay(func, (x_data,))
-        onnx_res = run_onnx(func_to_onnx(func, 'test_max_pool'), [x_data])
-        tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+        verify_results(func, [x_data], 'test_max_pool', rtol=1e-5, atol=1e-5)
 
     verify_max_pool((1, 4, 16, 16), pool_size=(2, 2), strides=(2, 2), padding=(0, 0), ceil_mode=False)
 
@@ -223,9 +208,7 @@ def test_batch_flatten():
         data = relay.var("data", relay.TensorType(d_shape, "float32"))
         func = relay.Function([data], relay.nn.batch_flatten(data))
         x_data = np.random.uniform(size=d_shape).astype("float32")
-        relay_res = run_relay(func, (x_data,))
-        onnx_res = run_onnx(func_to_onnx(func, 'test_batch_flatten'), [x_data])
-        tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+        verify_results(func, [x_data], 'test_batch_flatten', rtol=1e-5, atol=1e-5)
 
     verify_test_batch_flatten((1, 2, 3, 4))
     verify_test_batch_flatten((1, 8))
@@ -239,9 +222,7 @@ def test_bias_add():
 
         x_data = np.random.uniform(size=(1, 16)).astype("float32")
         bias = np.random.uniform(size=(16,)).astype("float32")
-        relay_res = run_relay(func, (x_data,bias))
-        onnx_res = run_onnx(func_to_onnx(func, 'test_bias_add'), [x_data, bias])
-        tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+        verify_results(func, [x_data, bias], 'test_bias_add', rtol=1e-5, atol=1e-5)
 
     verify_bias_add()
 
@@ -263,12 +244,8 @@ def test_batch_norm():
             gamma = np.random.uniform(size=gamma_shape).astype(dtype)
             moving_mean = np.random.uniform(size=gamma_shape).astype(dtype)
             moving_var = np.random.uniform(size=gamma_shape).astype(dtype)
-
-            relay_res = run_relay(func, (x_data, gamma, beta, moving_mean, moving_var))
-            onnx_res = run_onnx(func_to_onnx(func, 'test_batch_norm'), [x_data, gamma,beta, moving_mean, moving_var])
-
-            tol = 1e-3
-            tvm.testing.assert_allclose(relay_res, onnx_res, rtol=tol, atol=tol)
+            verify_results(func, [x_data, gamma, beta, moving_mean, moving_var], 'test_batch_norm', rtol=1e-3,
+                           atol=1e-3)
 
     verify_batch_norm(axis=1)
     verify_batch_norm(axis=3)
@@ -281,11 +258,8 @@ def test_pad():
             x = relay.var("x", shape=dshape, dtype=dtype)
             y = relay.nn.pad(x, ((1, 1), (2, 2), (3, 3), (4, 4)))
             func = relay.Function([x], y)
-
-            data = np.random.uniform(size=dshape).astype(dtype)
-            relay_res = run_relay(func, (data,))
-            onnx_res = run_onnx(func_to_onnx(func, 'test_pad'), [data])
-            tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+            x_data = np.random.uniform(size=dshape).astype(dtype)
+            verify_results(func, [x_data], 'test_pad', rtol=1e-5, atol=1e-5)
 
     verify_pad()
 
@@ -293,16 +267,12 @@ def test_pad():
 def test_sofmax():
     def verify_sofmax():
         for dtype in ['float32']:
-
             shape = (10, 4)
             x = relay.var("x", shape=shape, dtype=dtype)
             y = relay.nn.softmax(x, axis=1)
             func = relay.Function([x], y)
             x_data = np.random.uniform(size=shape).astype(dtype)
-
-            relay_res = run_relay(func, (x_data,))
-            onnx_res = run_onnx(func_to_onnx(func, 'test_sofmax'), [x_data])
-            tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+            verify_results(func, [x_data], 'test_softmax', rtol=1e-5, atol=1e-5)
 
     verify_sofmax()
 
@@ -312,14 +282,11 @@ def test_squeeze():
         x = relay.var("x", relay.TensorType(shape, dtype))
         z = relay.squeeze(x, axis=axis)
         func = relay.Function([x], z)
-
         x_data = np.random.random_sample(shape).astype(dtype)
-        relay_res = run_relay(func, (x_data,))
-        onnx_res = run_onnx(func_to_onnx(func, 'test_squeeze'), [x_data])
-        tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+        verify_results(func, [x_data], 'test_squeeze', rtol=1e-5, atol=1e-5)
 
     verify_squeeze((1, 3, 2, 5), "float32", None)
-    verify_squeeze((1, 3, 1), "float32", [2,])
+    verify_squeeze((1, 3, 1), "float32", [2, ])
     verify_squeeze((1, 2, 1, 2, 1), "float32", [0, 2])
 
 
@@ -330,9 +297,7 @@ def test_mean():
         y = relay.mean(x, axis, keepdims, exclude)
         func = relay.Function([x], y)
         x_data = np.random.uniform(size=data_shape).astype(dtype)
-        relay_res = run_relay(func, (x_data,))
-        onnx_res = run_onnx(func_to_onnx(func, 'test_mean'), [x_data])
-        tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+        verify_results(func, [x_data], 'test_mean', rtol=1e-5, atol=1e-5)
 
     verify_mean((1, 2), 0, False, False)
     verify_mean((1, 2), 0, True, False)
@@ -342,15 +307,12 @@ def test_mean():
 
 
 def test_strided_slice():
-
     def verify_strided_slice(dshape, begin, end, strides):
         x = relay.var("x", relay.TensorType(dshape, "float32"))
         z = relay.strided_slice(x, begin=begin, end=end, strides=strides)
         func = relay.Function([x], z)
         x_data = np.random.uniform(size=dshape).astype("float32")
-        relay_res = run_relay(func, (x_data,))
-        onnx_res = run_onnx(func_to_onnx(func, 'test_strided_slice'), [x_data])
-        tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+        verify_results(func, [x_data], 'test_strided_slice', rtol=1e-5, atol=1e-5)
 
     verify_strided_slice((3, 4, 3), [1, 1, 0], [4, 4, 3], None)
     verify_strided_slice((3, 4, 3), [0, 0, 0], [4, -5, 4], [1, -1, 2])
@@ -375,7 +337,6 @@ def test_cmp_type():
                     (relay.less, np.less),
                     (relay.equal, np.equal)
                     ):
-
         x_shape = (10, 4)
         y_shape = (5, 10, 1)
         t1 = relay.TensorType(x_shape)
@@ -386,10 +347,7 @@ def test_cmp_type():
         x_data = np.random.rand(*x_shape).astype(t1.dtype)
         y_data = np.random.rand(*y_shape).astype(t2.dtype)
         func = relay.Function([x, y], z)
-
-        relay_res = run_relay(func, (x_data, y_data))
-        onnx_res = run_onnx(func_to_onnx(func, 'test_cmp_op'), [x_data, y_data])
-        tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+        verify_results(func, [x_data, y_data], 'test_cmp_type', rtol=1e-5, atol=1e-5)
 
 
 def test_unary_identity():
@@ -400,11 +358,8 @@ def test_unary_identity():
             x = relay.var("x", relay.TensorType(shape, dtype))
             y = op(x)
             func = relay.Function([x, ], y)
-
             x_data = np.random.rand(*shape).astype(dtype)
-            relay_res = run_relay(func, (x_data,))
-            onnx_res = run_onnx(func_to_onnx(func, 'test_unary_identity'), [x_data])
-            tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+            verify_results(func, [x_data], 'test_cmp_type', rtol=1e-5, atol=1e-5)
 
 
 def test_binary_op():
@@ -417,10 +372,7 @@ def test_binary_op():
         x_data = np.random.rand(5, 10, 5).astype(dtype)
         y_data = np.random.rand(5, 10, 5).astype(dtype)
         func = relay.Function([x, y], z)
-
-        relay_res = run_relay(func, (x_data, y_data))
-        onnx_res = run_onnx(func_to_onnx(func, 'test_binary_op'), [x_data, y_data])
-        tvm.testing.assert_allclose(relay_res, onnx_res, rtol=1e-5, atol=1e-5)
+        verify_results(func, [x_data, y_data], 'test_binary_op', rtol=1e-5, atol=1e-5)
 
     for opfunc, ref in [(relay.add, np.add),
                         (relay.subtract, np.subtract),

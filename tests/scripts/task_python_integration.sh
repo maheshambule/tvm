@@ -42,6 +42,9 @@ TVM_FFI=ctypes python3 -m pytest -v tests/python/contrib
 
 TVM_FFI=ctypes python3 -m pytest -v tests/python/relay
 
+echo "Running Relay to ONNX test..."
+python3 -m pytest -v tests/python/relay/converter/test_onnx
+
 # Do not enable OpenGL
 # TVM_FFI=cython python -m pytest -v tests/webgl
 # TVM_FFI=ctypes python3 -m pytest -v tests/webgl
