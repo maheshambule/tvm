@@ -414,8 +414,7 @@ class Slice(OpConverter):
 
         slice_node = onnx.helper.make_node(cls.__name__,
                                            input_names,
-                                           node['output_names']
-                                           )
+                                           node['output_names'])
         model_container.add_nodes([slice_node])
 
 
