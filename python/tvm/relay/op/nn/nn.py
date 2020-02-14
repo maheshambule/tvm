@@ -273,7 +273,7 @@ def dilation2d(data,
 
 
     In the default case, where the data_layout is `NCHW`
-    and kernel_layout is `OIHW`, conv2d takes in
+    and kernel_layout is `OIHW`, dilation2d takes in
     a data Tensor with shape `(batch_size, in_channels, height, width)`,
     and a weight Tensor with shape `(channels, kernel_height, kernel_width)`
     to produce an output Tensor with the following rule:
