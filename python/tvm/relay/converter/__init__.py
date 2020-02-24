@@ -15,9 +15,9 @@
 # specific language governing permissions and limitations
 # under the License.
 """
-Converters for Relay
+Converters for Relay to others IRs
 
-Contains the converter for Relay
+Contain the converters for converting the Relay to other IRs  
 """
 
 from .onnx import to_onnx
