@@ -142,12 +142,12 @@ class CodegenDNNL : public ExprVisitor, public CodegenCBase {
     // Args: O, G, Ph, Pw, Kh, Kw, Sh, Sw
     args.push_back(std::to_string(wshape[0]));
     args.push_back(std::to_string(conv2d_attr->groups));
-    args.push_back(std::to_string(conv2d_attr->padding[0].as<IntImm>()->value));
-    args.push_back(std::to_string(conv2d_attr->padding[1].as<IntImm>()->value));
+    args.push_back(std::to_string(conv2d_attr->padding[0].as<IntImmNode>()->value));
+    args.push_back(std::to_string(conv2d_attr->padding[1].as<IntImmNode>()->value));
     args.push_back(std::to_string(wshape[2]));
     args.push_back(std::to_string(wshape[3]));
-    args.push_back(std::to_string(conv2d_attr->strides[0].as<IntImm>()->value));
-    args.push_back(std::to_string(conv2d_attr->strides[1].as<IntImm>()->value));
+    args.push_back(std::to_string(conv2d_attr->strides[0].as<IntImmNode>()->value));
+    args.push_back(std::to_string(conv2d_attr->strides[1].as<IntImmNode>()->value));
 
     return args;
   }
@@ -254,12 +254,13 @@ class DNNLModuleCodegen : public CSourceModuleCodegenBase {
    *
    * \return The runtime module that contains C source code.
    */
-  runtime::Module CreateCSourceModule(const NodeRef& ref) override {
+  runtime::Module CreateCSourceModule(const ObjectRef& ref) override {
     // Create headers
     code_stream_ << "#include <cstdint>\n";
     code_stream_ << "#include <cstdlib>\n";
     code_stream_ << "#include <cstring>\n";
     code_stream_ << "#include <tvm/runtime/c_runtime_api.h>\n";
+    code_stream_ << "#include <tvm/runtime/packed_func.h>\n";
     code_stream_ << "#include <dlpack/dlpack.h>\n";
     // dnnl_kernel file is saved under src/runtime/contrib/dnnl so that we don't
     // expose it to ordinary users. To make export_library use it, users need to
@@ -270,8 +271,8 @@ class DNNLModuleCodegen : public CSourceModuleCodegenBase {
 
     if (ref->IsInstance<FunctionNode>()) {
       GenDNNLFunc(Downcast<Function>(ref));
-    } else if (ref->IsInstance<relay::ModuleNode>()) {
-      relay::Module mod = Downcast<relay::Module>(ref);
+    } else if (ref->IsInstance<IRModuleNode>()) {
+      IRModule mod = Downcast<IRModule>(ref);
       for (const auto& it : mod->functions) {
         GenDNNLFunc(Downcast<Function>(it.second));
       }
@@ -281,7 +282,7 @@ class DNNLModuleCodegen : public CSourceModuleCodegenBase {
     }
 
     // Create a CSourceModule
-    const auto* pf = runtime::Registry::Get("module.csource_module_create");
+    const auto* pf = runtime::Registry::Get("runtime.CSourceModuleCreate");
     CHECK(pf != nullptr) << "Cannot find csource module to create the external runtime module";
     return (*pf)(code_stream_.str(), "cc");
   }
@@ -298,12 +299,12 @@ class DNNLModuleCodegen : public CSourceModuleCodegenBase {
  * \brief The external compiler/codegen tool. It takes a Relay expression/module and
  * compile it into a runtime module.
  */
-runtime::Module DNNLCompiler(const NodeRef& ref) {
+runtime::Module DNNLCompiler(const ObjectRef& ref) {
   DNNLModuleCodegen dnnl;
   return dnnl.CreateCSourceModule(ref);
 }
 
-TVM_REGISTER_API("relay.ext.dnnl").set_body_typed(DNNLCompiler);
+TVM_REGISTER_GLOBAL("relay.ext.dnnl").set_body_typed(DNNLCompiler);
 
 }  // namespace contrib
 }  // namespace relay

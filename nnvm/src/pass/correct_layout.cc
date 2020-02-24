@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * 
+ *
  *   http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -30,11 +30,11 @@
 namespace nnvm {
 namespace pass {
 
-nnvm::NodePtr CreateLayoutTransformNode(const Layout& src,
+nnvm::ObjectPtr CreateLayoutTransformNode(const Layout& src,
                                         const Layout& dst) {
   static const nnvm::Op* trans_op = nnvm::Op::Get("__layout_transform__");
   static int count = 0;
-  nnvm::NodePtr n = nnvm::Node::Create();
+  nnvm::ObjectPtr n = nnvm::Node::Create();
   n->attrs.op = trans_op;
   n->attrs.name = src.name() + "_to_" + dst.name() + std::to_string(count++);
   n->attrs.dict["src_layout"] = src.name();
@@ -52,18 +52,16 @@ using LayoutAttrDict = std::unordered_map<const Node*, std::vector<Layout> >;
 nnvm::Graph CorrectLayout(nnvm::Graph src) {
   static auto& op_correct_layout =
     nnvm::Op::GetAttr<FCorrectLayout>("FCorrectLayout");
-  static auto& op_correct_layout_ex =
-    nnvm::Op::GetAttr<FCorrectLayoutEx>("FCorrectLayoutEx");
 
   const IndexedGraph& idx = src.indexed_graph();
-  std::vector<nnvm::NodePtr> mirror_vec(idx.num_nodes(), nullptr);
+  std::vector<nnvm::ObjectPtr> mirror_vec(idx.num_nodes(), nullptr);
 
-  // (new) NodePtr -> output_layouts
+  // (new) ObjectPtr -> output_layouts
   LayoutAttrDict new_layouts;
 
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
     const auto& inode = idx[nid];
-    nnvm::NodePtr new_node = nnvm::Node::Create();
+    nnvm::ObjectPtr new_node = nnvm::Node::Create();
     *new_node = *(inode.source);
     if (new_node->is_variable()) {
       // Variable node. No operator. Only one output entry.
@@ -87,7 +85,7 @@ nnvm::Graph CorrectLayout(nnvm::Graph src) {
     std::vector<Layout> request_ilayouts(num_inputs, Layout::Undef());
     for (size_t i = 0; i < num_inputs; ++i) {
       const IndexedGraph::NodeEntry& input_entry = inode.inputs[i];
-      const NodePtr& new_input_node = mirror_vec[input_entry.node_id];
+      const ObjectPtr& new_input_node = mirror_vec[input_entry.node_id];
       CHECK(new_input_node != nullptr);
 
       // fill inputs by previous node (DFS order) inferred layouts.
@@ -111,21 +109,7 @@ nnvm::Graph CorrectLayout(nnvm::Graph src) {
       }
     }
 
-    if (op_correct_layout_ex.count(new_node->op())) {
-      std::vector<TShape> input_shapes;
-      if (src.HasAttr("shape")) {
-        const auto &shapes = src.GetAttr<std::vector<TShape> >("shape");
-        for (uint32_t i = 0; i < num_inputs; ++i) {
-          input_shapes.emplace_back(shapes[idx.entry_id(inode.inputs[i])]);
-        }
-      }
-      const auto &flayout = op_correct_layout_ex[new_node->op()];
-      CHECK(flayout(new_node->attrs, &input_shapes, &request_ilayouts,
-                    &last_request_ilayouts, &produce_olayouts))
-        << "Layout infer fail";
-      CHECK_EQ(request_ilayouts.size(), num_inputs);
-      CHECK_EQ(produce_olayouts.size(), num_outputs);
-    } else if (op_correct_layout.count(new_node->op())) {
+    if (op_correct_layout.count(new_node->op())) {
       const auto &flayout = op_correct_layout[new_node->op()];
       CHECK(flayout(new_node->attrs, &request_ilayouts, &last_request_ilayouts, &produce_olayouts))
         << "Layout infer fail";
@@ -138,14 +122,14 @@ nnvm::Graph CorrectLayout(nnvm::Graph src) {
 
     for (uint32_t i = 0; i < inode.inputs.size(); ++i) {
       const auto& e = inode.inputs[i];
-      const nnvm::NodePtr& in = mirror_vec[e.node_id];
+      const nnvm::ObjectPtr& in = mirror_vec[e.node_id];
       new_node->inputs[i] = nnvm::NodeEntry{in, e.index, e.version};
 
       // insert layout_transform if necessary
       const Layout& produce = produce_ilayouts[i];
       const Layout& request = request_ilayouts[i];
       if (produce != request && produce.defined()) {
-        nnvm::NodePtr tnode = CreateLayoutTransformNode(produce, request);
+        nnvm::ObjectPtr tnode = CreateLayoutTransformNode(produce, request);
         tnode->attrs.name = idx[e.node_id].source->attrs.name + "_" + request.name();
         tnode->inputs.emplace_back(new_node->inputs[i]);
         nnvm::NodeEntry tnode_output(std::move(tnode), 0, 0);

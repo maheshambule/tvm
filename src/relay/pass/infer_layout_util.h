@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * 
+ *
  *   http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -27,8 +27,9 @@
 #ifndef TVM_RELAY_PASS_INFER_LAYOUT_UTIL_H_
 #define TVM_RELAY_PASS_INFER_LAYOUT_UTIL_H_
 
-#include <tvm/data_layout.h>
+#include <tvm/tir/data_layout.h>
 #include <tvm/relay/expr.h>
+#include <tvm/relay/op_attr_types.h>
 #include <string>
 #include <tuple>
 #include "pattern_util.h"
@@ -44,7 +45,7 @@ namespace relay {
  * \return The adjusted Layout.
  */
 inline Layout AdjustSubordinateFactors(const Layout& src_layout, const Layout& old_layout,
-                                       const Array<tvm::Expr>& old_shape) {
+                                       const Array<tvm::PrimExpr>& old_shape) {
   // For each subordinate axis
   //   1) Find the corresponding dual axis.
   //   2) Find the Index of this dual axis in old_layout.
@@ -64,7 +65,7 @@ inline Layout AdjustSubordinateFactors(const Layout& src_layout, const Layout& o
 
       // 4) a) Check if this shape element is 1.
       bool is_shape_one = false;
-      if (auto* shape_int = shape_val.as<IntImm>()) {
+      if (auto* shape_int = shape_val.as<IntImmNode>()) {
         if (shape_int->value == 1) {
           new_layout += "1";
           is_shape_one = true;

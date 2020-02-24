@@ -108,33 +108,6 @@ void GraphRuntime::SetInput(int index, DLTensor* data_in) {
   data_entry_[eid].CopyFrom(data_in);
 }
 /*!
- * \brief Get the number of inputs
- *
- * \return The number of inputs from graph.
- */
-int GraphRuntime::NumInputs() const {
-  return input_nodes_.size();
-}
-/*!
- * \brief Get the number of the index-th input.
- * \param index The input index.
- *
- * \return The name of the index-th input.
- */
-std::string GraphRuntime::GetInputName(int index) const {
-  CHECK_LT(static_cast<size_t>(index), input_nodes_.size())
-      << "The index of ouf of range.";
-  return nodes_[input_nodes_[index]].name;
-}
-/*!
- * \brief Get the names of weight inputs.
- *
- * \return The names of the weight inputs.
- */
-std::vector<std::string> GraphRuntime::GetWeightNames() const {
-  return weight_names_;
-}
-/*!
  * \brief set index-th input to the graph without copying the data.
  * \param index The input index.
  * \param data_ref The input data that is referred.
@@ -226,16 +199,17 @@ void GraphRuntime::LoadParams(dmlc::Stream* strm) {
   CHECK(strm->Read(&reserved))
       << "Invalid parameters file format";
 
-  CHECK(strm->Read(&weight_names_))
+  std::vector<std::string> names;
+  CHECK(strm->Read(&names))
       << "Invalid parameters file format";
   uint64_t sz;
   strm->Read(&sz);
   size_t size = static_cast<size_t>(sz);
-  CHECK(size == weight_names_.size())
+  CHECK(size == names.size())
       << "Invalid parameters file format";
   for (size_t i = 0; i < size; ++i) {
-    int in_idx = GetInputIndex(weight_names_[i]);
-    CHECK_GE(in_idx, 0) << "Found param for non-existent input: " << weight_names_[i];
+    int in_idx = GetInputIndex(names[i]);
+    CHECK_GE(in_idx, 0) << "Found param for non-existent input: " << names[i];
     uint32_t eid = this->entry_id(input_nodes_[in_idx], 0);
     CHECK_LT(eid, data_entry_.size());
 
@@ -276,9 +250,9 @@ void GraphRuntime::ShareParams(const GraphRuntime& other, dmlc::Stream* strm) {
 
 void GraphRuntime::SetupStorage() {
   // Grab saved optimization plan from graph.
-  std::vector<TVMType> vtype;
+  std::vector<DLDataType> vtype;
   for (const std::string& s_type : attrs_.dltype) {
-    vtype.push_back(tvm::runtime::String2TVMType(s_type));
+    vtype.push_back(tvm::runtime::String2DLDataType(s_type));
   }
 
   // Size and device type of each storage pool entry.
@@ -365,31 +339,19 @@ void GraphRuntime::SetupOpExecs() {
       uint32_t eid = this->entry_id(nid, index);
       args.push_back(*(data_entry_[eid].operator->()));
     }
+    CHECK(inode.op_type == "tvm_op") << "Can only take tvm_op as op";
 
-    if (inode.op_type == "tvm_op") {
-      std::shared_ptr<OpArgs> op_args = nullptr;
-      std::tie(op_execs_[nid], op_args) =
-          CreateTVMOp(inode.param, args, inode.inputs.size());
+    std::shared_ptr<OpArgs> op_args = nullptr;
+    std::tie(op_execs_[nid], op_args) =
+        CreateTVMOp(inode.param, args, inode.inputs.size());
 
-      for (size_t i = 0; i < inode.inputs.size(); i++) {
-        uint32_t eid = this->entry_id(inode.inputs[i]);
-        // check if op input is model input
-        if (input_node_eids.count(eid) > 0) {
-          input_dltensors_[eid].push_back(
-              static_cast<DLTensor*>(op_args->arg_values[i].v_handle));
-        }
+    for (size_t i = 0; i < inode.inputs.size(); i++) {
+      uint32_t eid = this->entry_id(inode.inputs[i]);
+      // check if op input is model input
+      if (input_node_eids.count(eid) > 0) {
+        input_dltensors_[eid].push_back(
+            static_cast<DLTensor*>(op_args->arg_values[i].v_handle));
       }
-    } else if (inode.op_type == "_tensorrt_subgraph_op") {
-#ifdef TVM_GRAPH_RUNTIME_TENSORRT
-      CHECK_EQ(inode.subgraphs.size(), 1U) << "Only supports one subgraph per node";
-      CHECK_EQ(inode.subgraphs[0].arg_nodes.size(), inode.inputs.size());
-      op_execs_[nid] = tensorrt_exec_manager_.CreateExec(
-          inode.name, inode.subgraphs[0], args);
-#else
-      LOG(FATAL) << "TensorRT NOT enabled for operator " << inode.op_type;
-#endif  // TVM_GRAPH_RUNTIME_TENSORRT
-    } else {
-      LOG(FATAL) << "Unknown op type " << inode.op_type << " in graph runtime";
     }
   }
 }
@@ -409,7 +371,7 @@ std::pair<std::function<void()>, std::shared_ptr<GraphRuntime::OpArgs> > GraphRu
     DLTensor* t = &arg_ptr->args[i];
     v.v_handle = t;
     arg_ptr->arg_values.push_back(v);
-    arg_ptr->arg_tcodes.push_back(kArrayHandle);
+    arg_ptr->arg_tcodes.push_back(kTVMDLTensorHandle);
     if (param.flatten_data) {
       arg_ptr->shape_data[i] = std::accumulate(
           t->shape, t->shape + t->ndim, 1, std::multiplies<int64_t>());
@@ -430,8 +392,6 @@ std::pair<std::function<void()>, std::shared_ptr<GraphRuntime::OpArgs> > GraphRu
     };
     return {fexec, arg_ptr};
   }
-  CHECK(!module_.IsEmpty())
-    << "Module cannot be empty in order to get functions from the lib";
 
   // Get compiled function from the module that contains both host and device
   // code.
@@ -454,7 +414,7 @@ PackedFunc GraphRuntime::GetFunction(
   // Return member functions during query.
   if (name == "set_input") {
     return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
-        if (args[0].type_code() == kStr) {
+        if (args[0].type_code() == kTVMStr) {
           int in_idx = this->GetInputIndex(args[0]);
           if (in_idx >= 0) this->SetInput(in_idx, args[1]);
         } else {
@@ -463,7 +423,7 @@ PackedFunc GraphRuntime::GetFunction(
       });
   } else if (name == "set_input_zero_copy") {
     return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
-      if (args[0].type_code() == kStr) {
+      if (args[0].type_code() == kTVMStr) {
         int in_idx = this->GetInputIndex(args[0]);
         if (in_idx >= 0) this->SetInputZeroCopy(in_idx, args[1]);
       } else {
@@ -481,7 +441,7 @@ PackedFunc GraphRuntime::GetFunction(
   } else if (name == "get_input") {
     return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
         int in_idx = 0;
-        if (args[0].type_code() == kStr) {
+        if (args[0].type_code() == kTVMStr) {
           in_idx = this->GetInputIndex(args[0]);
         } else {
           in_idx = args[0];

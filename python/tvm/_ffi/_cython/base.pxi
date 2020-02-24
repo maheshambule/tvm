@@ -26,18 +26,18 @@ cdef enum TVMTypeCode:
     kInt = 0
     kUInt = 1
     kFloat = 2
-    kHandle = 3
-    kNull = 4
-    kTVMType = 5
+    kTVMOpaqueHandle = 3
+    kTVMNullptr = 4
+    kTVMDataType = 5
     kTVMContext = 6
-    kArrayHandle = 7
-    kObjectHandle = 8
-    kModuleHandle = 9
-    kFuncHandle = 10
-    kStr = 11
-    kBytes = 12
-    kNDArrayContainer = 13
-    kExtBegin = 15
+    kTVMDLTensorHandle = 7
+    kTVMObjectHandle = 8
+    kTVMModuleHandle = 9
+    kTVMPackedFuncHandle = 10
+    kTVMStr = 11
+    kTVMBytes = 12
+    kTVMNDArrayHandle = 13
+    kTVMExtBegin = 15
 
 cdef extern from "tvm/runtime/c_runtime_api.h":
     ctypedef struct DLDataType:
@@ -75,7 +75,7 @@ ctypedef int64_t tvm_index_t
 ctypedef DLTensor* DLTensorHandle
 ctypedef void* TVMStreamHandle
 ctypedef void* TVMRetValueHandle
-ctypedef void* TVMFunctionHandle
+ctypedef void* TVMPackedFuncHandle
 ctypedef void* ObjectHandle
 
 ctypedef struct TVMObject:
@@ -96,13 +96,15 @@ ctypedef void (*TVMPackedCFuncFinalizer)(void* resource_handle)
 cdef extern from "tvm/runtime/c_runtime_api.h":
     void TVMAPISetLastError(const char* msg)
     const char *TVMGetLastError()
-    int TVMFuncCall(TVMFunctionHandle func,
+    int TVMFuncGetGlobal(const char* name,
+                         TVMPackedFuncHandle* out);
+    int TVMFuncCall(TVMPackedFuncHandle func,
                     TVMValue* arg_values,
                     int* type_codes,
                     int num_args,
                     TVMValue* ret_val,
                     int* ret_type_code)
-    int TVMFuncFree(TVMFunctionHandle func)
+    int TVMFuncFree(TVMPackedFuncHandle func)
     int TVMCFuncSetReturn(TVMRetValueHandle ret,
                           TVMValue* value,
                           int* type_code,
@@ -110,7 +112,7 @@ cdef extern from "tvm/runtime/c_runtime_api.h":
     int TVMFuncCreateFromCFunc(TVMPackedCFunc func,
                                void* resource_handle,
                                TVMPackedCFuncFinalizer fin,
-                               TVMFunctionHandle *out)
+                               TVMPackedFuncHandle *out)
     int TVMCbArgToReturn(TVMValue* value, int code)
     int TVMArrayAlloc(tvm_index_t* shape,
                       tvm_index_t ndim,

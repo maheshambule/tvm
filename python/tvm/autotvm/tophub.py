@@ -147,6 +147,7 @@ def check_backend(tophub_location, backend):
     if os.path.isfile(os.path.join(AUTOTVM_TOPHUB_ROOT_PATH, package_name)):
         return True
 
+    # pylint: disable=import-outside-toplevel
     if sys.version_info >= (3,):
         import urllib.request as urllib2
     else:
@@ -214,7 +215,11 @@ def load_reference_log(backend, model, workload_name, template_key):
 
     if key not in REFERENCE_LOG_CACHE:
         tmp = []
-        if os.path.isfile(os.path.join(AUTOTVM_TOPHUB_ROOT_PATH, package_name)):
+        # Download the config file from tophub if not exists.
+        if not os.path.exists(filename):
+            tophub_location = _get_tophub_location()
+            download_package(tophub_location, package_name)
+        if os.path.isfile(filename): # in case download failed
             find = False
             inp = None
             counts = {}

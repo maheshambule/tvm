@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * 
+ *
  *   http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -69,15 +69,15 @@ Expr CanonicalizeOps(const Expr& e) {
 namespace transform {
 
 Pass CanonicalizeOps() {
-  runtime::TypedPackedFunc<Function(Function, Module, PassContext)> pass_func =
-    [=](Function f, Module m, PassContext pc) {
+  runtime::TypedPackedFunc<Function(Function, IRModule, PassContext)> pass_func =
+    [=](Function f, IRModule m, PassContext pc) {
     return Downcast<Function>(CanonicalizeOps(f));
   };
   return CreateFunctionPass(pass_func, 3, "CanonicalizeOps",
-                            {ir::StringImm::make("InferType")});
+                            {tir::StringImmNode::make("InferType")});
 }
 
-TVM_REGISTER_API("relay._transform.CanonicalizeOps")
+TVM_REGISTER_GLOBAL("relay._transform.CanonicalizeOps")
 .set_body_typed(CanonicalizeOps);
 
 }  // namespace transform

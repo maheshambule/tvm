@@ -28,7 +28,6 @@
 #include <dmlc/logging.h>
 #include <type_traits>
 
-
 namespace tvm {
 namespace runtime {
 /*!
@@ -44,7 +43,7 @@ class DataType {
     kInt = kDLInt,
     kUInt = kDLUInt,
     kFloat = kDLFloat,
-    kHandle = TVMTypeCode::kHandle,
+    kHandle = TVMTypeCode::kTVMOpaqueHandle,
   };
   /*! \brief default constructor */
   DataType() {}
@@ -92,6 +91,10 @@ class DataType {
   /*! \return whether type is a float type. */
   bool is_float() const {
     return code() == DataType::kFloat;
+  }
+  /*! \return whether type is a float16 type. */
+  bool is_float16() const {
+    return is_float() && bits() == 16;
   }
   /*! \return whether type is an int type. */
   bool is_int() const {
@@ -227,12 +230,35 @@ class DataType {
 inline int GetVectorBytes(DataType dtype) {
   int data_bits = dtype.bits() * dtype.lanes();
   // allow bool to exist
-  if (dtype == DataType::Bool()) return 1;
+  if (dtype == DataType::Bool() ||
+      dtype == DataType::Int(4) ||
+      dtype == DataType::UInt(4) ||
+      dtype == DataType::Int(1)) {
+    return 1;
+  }
   CHECK_EQ(data_bits % 8, 0U)
       << "Need to load/store by multiple of bytes";
   return data_bits / 8;
 }
 
+/*!
+ * \brief Check whether type matches the given spec.
+ * \param t The type
+ * \param code The type code.
+ * \param bits The number of bits to be matched.
+ * \param lanes The number of lanes in the type.
+ */
+inline bool TypeMatch(DLDataType t, int code, int bits, int lanes = 1) {
+  return t.code == code && t.bits == bits && t.lanes == lanes;
+}
+/*!
+ * \brief Check whether two types are equal .
+ * \param lhs The left operand.
+ * \param rhs The right operand.
+ */
+inline bool TypeEqual(DLDataType lhs, DLDataType rhs) {
+  return lhs.code == rhs.code && lhs.bits == rhs.bits && lhs.lanes == rhs.lanes;
+}
 }  // namespace runtime
 
 using DataType = runtime::DataType;

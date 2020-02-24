@@ -41,12 +41,12 @@
 
 // Hashtag in the source to build current CI docker builds
 //
-// - ci-cpu:v0.54: e7c88a99f830de30814df14eaa980547ecbd61c1
+// - ci-cpu:v0.55: 07b45d958d4af91ec1bab66f6cf391d1ce12ddaf
 //
 
-ci_lint = "tvmai/ci-lint:v0.51"
-ci_gpu = "tvmai/ci-gpu:v0.56"
-ci_cpu = "tvmai/ci-cpu:v0.54"
+ci_lint = "tvmai/ci-lint:v0.60"
+ci_gpu = "tvmai/ci-gpu:v0.61"
+ci_cpu = "tvmai/ci-cpu:v0.60"
 ci_i386 = "tvmai/ci-i386:v0.52"
 
 // tvm libraries
@@ -169,7 +169,7 @@ stage('Build') {
            echo set\\(CMAKE_CXX_COMPILER g++\\) >> config.cmake
            echo set\\(CMAKE_CXX_FLAGS -Werror\\) >> config.cmake
            """
-        make(ci_gpu, 'build', '-j4')
+        make(ci_gpu, 'build', '-j2')
         pack_lib('gpu', tvm_multilib)
         // compiler test
         sh """
@@ -186,7 +186,7 @@ stage('Build') {
            echo set\\(CMAKE_CXX_COMPILER clang-7\\) >> config.cmake
            echo set\\(CMAKE_CXX_FLAGS -Werror\\) >> config.cmake
            """
-        make(ci_gpu, 'build2', '-j4')
+        make(ci_gpu, 'build2', '-j2')
       }
     }
   },
@@ -207,16 +207,18 @@ stage('Build') {
            echo set\\(USE_LLVM llvm-config-8\\) >> config.cmake
            echo set\\(USE_NNPACK ON\\) >> config.cmake
            echo set\\(NNPACK_PATH /NNPACK/build/\\) >> config.cmake
+           echo set\\(USE_ANTLR ON\\) >> config.cmake
            echo set\\(CMAKE_CXX_COMPILER g++\\) >> config.cmake
            echo set\\(CMAKE_CXX_FLAGS -Werror\\) >> config.cmake
            echo set\\(HIDE_PRIVATE_SYMBOLS ON\\) >> config.cmake
            """
-        make(ci_cpu, 'build', '-j4')
+        make(ci_cpu, 'build', '-j2')
         pack_lib('cpu', tvm_lib)
         timeout(time: max_time, unit: 'MINUTES') {
           sh "${docker_run} ${ci_cpu} ./tests/scripts/task_python_unittest.sh"
           sh "${docker_run} ${ci_cpu} ./tests/scripts/task_python_integration.sh"
-          sh "${docker_run} ${ci_cpu} ./tests/scripts/task_python_vta.sh"
+          sh "${docker_run} ${ci_cpu} ./tests/scripts/task_python_vta_fsim.sh"
+          sh "${docker_run} ${ci_cpu} ./tests/scripts/task_python_vta_tsim.sh"
           sh "${docker_run} ${ci_cpu} ./tests/scripts/task_golang.sh"
         }
       }
@@ -240,7 +242,7 @@ stage('Build') {
            echo set\\(CMAKE_CXX_COMPILER g++\\) >> config.cmake
            echo set\\(CMAKE_CXX_FLAGS -Werror\\) >> config.cmake
            """
-        make(ci_i386, 'build', '-j4')
+        make(ci_i386, 'build', '-j2')
         pack_lib('i386', tvm_multilib)
       }
     }
@@ -268,7 +270,7 @@ stage('Unit Test') {
         timeout(time: max_time, unit: 'MINUTES') {
           sh "${docker_run} ${ci_i386} ./tests/scripts/task_python_unittest.sh"
           sh "${docker_run} ${ci_i386} ./tests/scripts/task_python_integration.sh"
-          sh "${docker_run} ${ci_i386} ./tests/scripts/task_python_vta.sh"
+          sh "${docker_run} ${ci_i386} ./tests/scripts/task_python_vta_fsim.sh"
         }
       }
     }
@@ -321,19 +323,6 @@ stage('Integration Test') {
       }
     }
   }
-  // TODO: Fix the doc
-  // 'docs: GPU': {
-  //   node('GPU') {
-  //     ws('workspace/tvm/docs-python-gpu') {
-  //       init_git()
-  //       unpack_lib('gpu', tvm_multilib)
-  //       timeout(time: max_time, unit: 'MINUTES') {
-  //         sh "${docker_run} ${ci_gpu} ./tests/scripts/task_python_docs.sh"
-  //       }
-  //       pack_lib('mydocs', 'docs.tgz')
-  //     }
-  //   }
-  // }
 }
 
 /*
@@ -354,13 +343,13 @@ stage('Build packages') {
 }
 */
 
-// stage('Deploy') {
-//     node('doc') {
-//       ws('workspace/tvm/deploy-docs') {
-//         if (env.BRANCH_NAME == "master") {
-//            unpack_lib('mydocs', 'docs.tgz')
-//            sh "tar xf docs.tgz -C /var/docs"
-//         }
-//       }
-//     }
-// }
+stage('Deploy') {
+    node('doc') {
+      ws(per_exec_ws("tvm/deploy-docs")) {
+        if (env.BRANCH_NAME == "master") {
+           unpack_lib('mydocs', 'docs.tgz')
+           sh "tar xf docs.tgz -C /var/docs"
+        }
+      }
+    }
+}

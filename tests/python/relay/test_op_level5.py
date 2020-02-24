@@ -21,17 +21,12 @@ import numpy as np
 import tvm
 from tvm import relay
 from tvm.relay import transform
-from tvm.relay.testing import ctx_list
+from tvm.relay.testing import ctx_list, run_infer_type
 import topi.testing
 
-def run_infer_type(expr):
-    mod = relay.Module.from_expr(expr)
-    mod = transform.InferType()(mod)
-    entry = mod["main"]
-    return entry if isinstance(expr, relay.Function) else entry.body
 
 def test_resize_infer_type():
-    n, c, h, w = tvm.var("n"), tvm.var("c"), tvm.var("h"), tvm.var("w")
+    n, c, h, w = tvm.size_var("n"), tvm.size_var("c"), tvm.size_var("h"), tvm.size_var("w")
     x = relay.var("x", relay.TensorType((n, c, h, w), "int8"))
     th, tw = tvm.var("th"), tvm.var("tw")
     z = relay.image.resize(x, (th, tw))
@@ -39,7 +34,7 @@ def test_resize_infer_type():
     assert zz.checked_type == relay.TensorType((n, c, th, tw), "int8")
 
     x = relay.var("x", relay.TensorType((n, c, h, w), "int8"))
-    z= relay.image.resize(x, (100, 200), "NCHW", "bilinear", True)
+    z= relay.image.resize(x, (100, 200), "NCHW", "bilinear", "align_corners")
     assert "size=" in z.astext()
     zz = run_infer_type(z)
     assert zz.checked_type == relay.TensorType((n, c, 100, 200), "int8")
@@ -57,7 +52,7 @@ def test_resize():
         else:
             ref_res = topi.testing.upsampling_python(x_data, (scale, scale), layout)
         x = relay.var("x", relay.TensorType(dshape, "float32"))
-        z = relay.image.resize(x, size, layout, method, True)
+        z = relay.image.resize(x, size, layout, method, "align_corners")
         assert "size=" in z.astext()
         zz = run_infer_type(z)
         assert zz.checked_type == relay.TensorType(ref_res.shape, "float32")
@@ -72,6 +67,47 @@ def test_resize():
         for layout in ["NHWC", "NCHW"]:
             verify_resize((1, 4, 4, 4), 2, method, layout)
 
+def test_crop_and_resize():
+    def verify_crop_and_resize(img_shape, boxes, box_indices, crop_size,
+                               layout, method, extrapolation_value=0.0):
+
+        image_data = np.random.uniform(size=img_shape).astype("float32")
+
+        ref_res = topi.testing.crop_and_resize_python(image_data,
+                                                      boxes,
+                                                      box_indices,
+                                                      crop_size,
+                                                      layout, method,
+                                                      extrapolation_value)
+
+        img = relay.var("img", relay.TensorType(img_shape, 'float32'))
+        bx = relay.var('bx', relay.TensorType(boxes.shape, 'float32'))
+        bx_idx = relay.var('bx_idx', relay.TensorType(box_indices.shape, 'int32'))
+
+        z = relay.image.crop_and_resize(img, bx, bx_idx, list(crop_size),
+                                        layout, method, extrapolation_value)
+        zz = run_infer_type(z)
+        assert zz.checked_type == relay.TensorType(ref_res.shape, "float32")
+        func = relay.Function([img, bx, bx_idx], z)
+
+        for target, ctx in ctx_list():
+            for kind in ["graph", "debug"]:
+                intrp = relay.create_executor(kind, ctx=ctx, target=target)
+                op_res = intrp.evaluate(func)(image_data, boxes, box_indices)
+                tvm.testing.assert_allclose(op_res.asnumpy(), ref_res, rtol=1e-3, atol=1e-04)
+
+    boxes_nhwc = np.array([[.1, .2, .8, .7], [.2, 0, 1, .6]]).astype("float32")
+    indices_nhwc = np.array([1, 0]).astype("int32")
+    size_nhwc = np.array([20, 30]).astype("int32")
+    boxes_nchw = np.array([[0, 0, 1, 1], [.2, .1, 1, .9]]).astype("float32")
+    indices_nchw = np.array([0, 1]).astype("int32")
+    size_nchw = np.array([30, 30]).astype("int32")
+
+    for method in ["bilinear", "nearest_neighbor"]:
+        verify_crop_and_resize((10, 224, 224, 3), boxes_nhwc, indices_nhwc,
+                               size_nhwc, 'NHWC', method)
+        verify_crop_and_resize((5, 3, 255, 255), boxes_nchw, indices_nchw,
+                               size_nchw, 'NCHW', method, 0.1)
 
 def test_multibox_prior():
     def get_ref_result(dshape, sizes=(1.0,),
@@ -146,7 +182,7 @@ def test_multibox_prior():
     x = relay.var("x", relay.TensorType(dshape, "float32"))
     verify_multibox_prior(x, dshape, ref_res, sizes, ratios, steps, offsets,
                           check_size=True)
-    y = relay.var("y", relay.TensorType((tvm.var("n"), 3, 56, 56), "float32"))
+    y = relay.var("y", relay.TensorType((tvm.size_var("n"), 3, 56, 56), "float32"))
     verify_multibox_prior(x, dshape, ref_res, sizes, ratios, steps, offsets,
                           check_size=True, check_type_only=True)
 
@@ -154,7 +190,7 @@ def test_multibox_prior():
     ref_res = get_ref_result(dshape, clip=False)
     x = relay.var("x", relay.TensorType(dshape, "float32"))
     verify_multibox_prior(x, dshape, ref_res, clip=False)
-    y = relay.var("y", relay.TensorType((tvm.var("n"), 24, 32, 32), "float32"))
+    y = relay.var("y", relay.TensorType((tvm.size_var("n"), 24, 32, 32), "float32"))
     verify_multibox_prior(x, dshape, ref_res, clip=False, check_type_only=True)
 
 
@@ -185,8 +221,6 @@ def test_get_valid_counts():
         func = relay.Function([x], z.astuple())
         func = run_infer_type(func)
         for target, ctx in ctx_list():
-            if target == 'cuda':
-                return
             intrp = relay.create_executor("debug", ctx=ctx, target=target)
             out = intrp.evaluate(func)(np_data)
             tvm.testing.assert_allclose(out[0].asnumpy(), np_out1, rtol=1e-3, atol=1e-04)
@@ -246,7 +280,7 @@ def test_non_max_suppression():
     np_indices_result = np.array([[3, 0, -1, -1, -1]])
     num_anchors = 5
 
-    dshape = (tvm.var("n"), num_anchors, 6)
+    dshape = (tvm.size_var("n"), num_anchors, 6)
     verify_nms(np_data, np_valid_count, dshape, np_result, np_indices_result,
                force_suppress=True, top_k=2, check_type_only=True)
     dshape = (1, num_anchors, 6)
@@ -257,7 +291,7 @@ def test_non_max_suppression():
                            [1, 0.7, 30, 60, 50, 80], [-1, -1, -1, -1, -1, -1],
                            [-1, -1, -1, -1, -1, -1]]])
     np_indices_result = np.array([[3, 0, 1, -1, -1]])
-    dshape = (tvm.var("n"), num_anchors, 6)
+    dshape = (tvm.size_var("n"), num_anchors, 6)
     verify_nms(np_data, np_valid_count, dshape, np_result,
                np_indices_result, check_type_only=True)
     dshape = (1, num_anchors, 6)
@@ -320,7 +354,7 @@ def test_multibox_transform_loc():
     def test_threshold():
         num_anchors = 5
         num_classes = 5
-        n = tvm.var("n")
+        n = tvm.size_var("n")
         cls_prob = relay.var(
             "cls_prob",
             relay.ty.TensorType((n, num_anchors, num_classes), "float32"))
@@ -425,7 +459,7 @@ def test_proposal():
         func = relay.Function([cls_prob, bbox_pred, im_info], z)
         func = run_infer_type(func)
         for target in ['llvm', 'cuda']:
-            if not tvm.module.enabled(target):
+            if not tvm.runtime.enabled(target):
                 print("Skip test because %s is not enabled." % target)
                 continue
             ctx = tvm.context(target, 0)
@@ -486,7 +520,7 @@ def test_yolo_reorg_infer_shape():
         assert "stride=" in z.astext()
         assert zz.checked_type == relay.ty.TensorType(out_shape, "float32")
 
-    n, c, h, w = tvm.var("n"), tvm.var("c"), tvm.var("h"), tvm.var("w")
+    n, c, h, w = tvm.size_var("n"), tvm.size_var("c"), tvm.size_var("h"), tvm.size_var("w")
     idxd = tvm.indexdiv
     verify_yolo_reorg((n, c, 20, 20), 10, (n, c*10*10, 2, 2))
     verify_yolo_reorg((n, c, h, w), 2, (n, c*2*2, idxd(h, 2), idxd(w, 2)))
@@ -639,6 +673,7 @@ def test_space_to_depth():
 if __name__ == "__main__":
     test_resize_infer_type()
     test_resize()
+    test_crop_and_resize()
     test_multibox_prior()
     test_multibox_transform_loc()
     test_get_valid_counts()

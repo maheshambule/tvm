@@ -16,9 +16,7 @@
 # under the License.
 """TVM operator pooling compute."""
 from __future__ import absolute_import
-import tvm
 from .. import cpp
-
 
 POOL_TYPE_CODE = {
     "avg": 0,
@@ -115,77 +113,6 @@ def pool(data,
     """
     return cpp.nn.pool(data, kernel, stride, padding,
                        POOL_TYPE_CODE[pool_type], ceil_mode, layout, count_include_pad)
-
-@tvm.target.generic_func
-def max_pool2d_alter_layout(attrs, inputs, tinfos):
-    #pylint: disable=unused-argument
-    """Change max pool2d layout.
-
-    Parameters
-    ----------
-    attrs : nnvm.top.AttrDict
-        Attributes of current convolution
-    inputs : nnvm.symbol
-        Grouped input symbols
-    tinfos : list
-        Input shape and dtype
-    """
-    # not to change by default
-    return None
-
-
-@tvm.target.generic_func
-def avg_pool2d_alter_layout(attrs, inputs, tinfos):
-    #pylint: disable=unused-argument
-    """Change average pool2d layout.
-
-    Parameters
-    ----------
-    attrs : nnvm.top.AttrDict
-        Attributes of current convolution
-    inputs : nnvm.symbol
-        Grouped input symbols
-    tinfos : list
-        Input shape and dtype
-    """
-    # not to change by default
-    return None
-
-
-@tvm.target.generic_func
-def global_max_pool2d_alter_layout(attrs, inputs, tinfos):
-    #pylint: disable=unused-argument
-    """Change global max pool2d layout.
-
-    Parameters
-    ----------
-    attrs : nnvm.top.AttrDict
-        Attributes of current convolution
-    inputs : nnvm.symbol
-        Grouped input symbols
-    tinfos : list
-        Input shape and dtype
-    """
-    # not to change by default
-    return None
-
-
-@tvm.target.generic_func
-def global_avg_pool2d_alter_layout(attrs, inputs, tinfos):
-    #pylint: disable=unused-argument
-    """Change global average pool2d layout.
-
-    Parameters
-    ----------
-    attrs : nnvm.top.AttrDict
-        Attributes of current convolution
-    inputs : nnvm.symbol
-        Grouped input symbols
-    tinfos : list
-        Input shape and dtype
-    """
-    # not to change by default
-    return None
 
 def pool_grad(grads,
               data,
@@ -289,6 +216,67 @@ def adaptive_pool(data,
         n-D in the same layout
     """
     return cpp.nn.adaptive_pool(data, output_size, POOL_TYPE_CODE[pool_type], layout)
+
+
+def pool1d(data,
+           kernel,
+           stride,
+           padding,
+           pool_type,
+           ceil_mode=False,
+           layout="NCW",
+           count_include_pad=True):
+    """Perform pooling on width dimension of data.
+       Width axis is determined according to the layout string.
+       in which 'w' means width.
+       Width dimension cannot be split.
+       For example, NCW, NCW16c, etc. are valid for pool,
+       while NCW16w is not.
+       See parameter `layout` for more information of the layout string convention.
+
+    Parameters
+    ----------
+    data : tvm.Tensor
+        n-D with shape of layout
+
+    kernel : list/tuple of one int or int
+        Kernel size, [kernel_width]
+
+    stride : list/tuple of one int or int
+        Stride size, [stride_width]
+
+    padding : list/tuple of two ints
+        Pad size, [pad_left, pad_right]
+
+    pool_type : str
+        Pool type, 'max' or 'avg'
+
+    ceil_mode : bool
+        Whether to use ceil when calculating output size.
+
+    layout: string
+        Layout of the input data.
+        The layout is supposed to be composed of upper cases, lower cases and numbers,
+        where upper case indicates a dimension and
+        the corresponding lower case with factor size indicates the split dimension.
+        For example, NCW16c can describe a 4-D tensor of
+        [batch_size, channel, width, channel_block],
+        in which channel_block=16 is a split of dimension channel.
+
+    count_include_pad: bool
+        Whether include padding in the calculation when pool_type is 'avg'
+
+    Returns
+    -------
+    output : tvm.Tensor
+        n-D in the same layout
+    """
+    if isinstance(kernel, int):
+        kernel = [kernel, ]
+    if isinstance(stride, int):
+        stride = [stride, ]
+    return cpp.nn.pool1d(data, kernel, stride, padding,
+                         POOL_TYPE_CODE[pool_type], ceil_mode, layout, count_include_pad)
 
 
 def pool3d(data,

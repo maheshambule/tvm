@@ -24,6 +24,8 @@ export PYTHONPATH=python:topi/python
 export TVM_BIND_THREADS=0
 export OMP_NUM_THREADS=1
 
+find . -type f -path "*.pyc" | xargs rm -f
+
 # Rebuild cython
 make cython3
 
@@ -50,6 +52,3 @@ python3 -m pytest -v tests/python/frontend/caffe2
 
 echo "Running relay DarkNet frontend test..."
 python3 -m pytest -v tests/python/frontend/darknet
-
-echo "Running relay PyTorch frontend test..."
-python3 -m pytest -v tests/python/frontend/pytorch_neo

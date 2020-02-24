@@ -28,7 +28,7 @@
 #include <tvm/relay/op_attr_types.h>
 #include <tvm/relay/attrs/transform.h>
 #include <tvm/relay/transform.h>
-#include <tvm/operation.h>
+#include <tvm/te/operation.h>
 #include <tuple>
 #include <vector>
 #include <functional>
@@ -86,10 +86,10 @@ class ConvertTransformMemorizer : public TransformMemorizer {
     Expr new_e;
     bool modified = false;
     if (fconvert_layout.count(op)) {
-      tvm::Array<tvm::Tensor> tinfos;
+      tvm::Array<tvm::te::Tensor> tinfos;
       for (auto expr : ref_call->args) {
         auto ttype = expr->type_as<TensorTypeNode>();
-        tinfos.push_back(tvm::placeholder(ttype->shape, ttype->dtype));
+        tinfos.push_back(tvm::te::placeholder(ttype->shape, ttype->dtype));
       }
       Expr altered_value =
           fconvert_layout[op](ref_call->attrs, new_args, tinfos, operator->()->desired_layout_);
@@ -117,8 +117,8 @@ class ConvertTransformMemorizer : public TransformMemorizer {
  */
 Expr ConvertLayout(const Expr& expr, const std::string& desired_layout) {
   ConvertTransformMemorizer transformMemorizer(
-      make_node<ConvertTransformMemorizerNode>(desired_layout));
-  auto fcontext = [&](const Call& call) -> NodeRef { return transformMemorizer; };
+      make_object<ConvertTransformMemorizerNode>(desired_layout));
+  auto fcontext = [&](const Call& call) -> ObjectRef { return transformMemorizer; };
 
   return ForwardRewrite(expr, LayoutRewriter<ConvertTransformMemorizer>, fcontext);
 }
@@ -128,17 +128,17 @@ Expr ConvertLayout(const Expr& expr, const std::string& desired_layout) {
 namespace transform {
 
 Pass ConvertLayout(const std::string& desired_layout) {
-  runtime::TypedPackedFunc<Function(Function, Module, PassContext)> pass_func =
-      [=](Function f, Module m, PassContext pc) {
+  runtime::TypedPackedFunc<Function(Function, IRModule, PassContext)> pass_func =
+      [=](Function f, IRModule m, PassContext pc) {
         return Downcast<Function>(relay::convert_op_layout::ConvertLayout(f, desired_layout));
       };
   return CreateFunctionPass(
       pass_func, 3, "ConvertLayout",
-      {ir::StringImm::make("InferType"),
-       ir::StringImm::make("CanonicalizeOps")});
+      {tir::StringImmNode::make("InferType"),
+       tir::StringImmNode::make("CanonicalizeOps")});
 }
 
-TVM_REGISTER_API("relay._transform.ConvertLayout").set_body_typed(ConvertLayout);
+TVM_REGISTER_GLOBAL("relay._transform.ConvertLayout").set_body_typed(ConvertLayout);
 
 }  // namespace transform
 

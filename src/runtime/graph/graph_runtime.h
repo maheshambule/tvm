@@ -37,11 +37,6 @@
 #include <vector>
 #include <string>
 
-#include "../../contrib/subgraph/subgraph.h"
-#ifdef TVM_GRAPH_RUNTIME_TENSORRT
-#include "../../contrib/subgraph/tensorrt_executor.h"
-#endif  // TVM_GRAPH_RUNTIME_TENSORRT
-
 namespace tvm {
 namespace runtime {
 
@@ -123,19 +118,6 @@ class GraphRuntime : public ModuleNode {
    */
   void SetInput(int index, DLTensor* data_in);
   /*!
-   * \brief Get the number of inputs
-   *
-   * \return The number of inputs from graph.
-   */
-  int NumInputs() const;
-  /*!
-   * \brief Get the number of the index-th input.
-   * \param index The input index.
-   *
-   * \return The name of the index-th input.
-   */
-  std::string GetInputName(int index) const;
-   /*!
    * \brief set index-th input to the graph without copying the data
    * \param index The input index.
    * \param data_ref The input data that is referred.
@@ -147,12 +129,6 @@ class GraphRuntime : public ModuleNode {
    * \return The number of outputs from graph.
    */
   int NumOutputs() const;
-  /*!
-   * \brief Get the names of weight inputs.
-   *
-   * \return The names fo the weight inputs.
-   */
-  std::vector<std::string> GetWeightNames() const;
   /*!
    * \brief Return NDArray for given input index.
    * \param index The input index.
@@ -244,8 +220,6 @@ class GraphRuntime : public ModuleNode {
     std::vector<NodeEntry> inputs;
     // control deps
     std::vector<uint32_t> control_deps;
-    // subgraphs
-    std::vector<contrib::Subgraph> subgraphs;
     // JSON Loader
     void LoadAttrs(dmlc::JSONReader *reader, TVMOpParam* param) {
       int bitmask = 0;
@@ -269,19 +243,6 @@ class GraphRuntime : public ModuleNode {
       }
       CHECK_EQ(bitmask, 1|2|4|8) << "invalid format";
     }
-
-    // Subgraph loader
-    static void LoadSubgraphs(dmlc::JSONReader *reader,
-                              std::vector<contrib::Subgraph>* subgraphs) {
-      reader->BeginArray();
-      while (reader->NextArrayItem()) {
-        subgraphs->emplace_back();
-        reader->Read(&subgraphs->back());
-      }
-      CHECK(subgraphs->size() == 1U)
-        << "Only supports at most one subgraph per operator node for now";
-    }
-
     // JSON Loader
     void Load(dmlc::JSONReader *reader) {
       reader->BeginObject();
@@ -301,8 +262,6 @@ class GraphRuntime : public ModuleNode {
           this->LoadAttrs(reader, &param);
         } else if (key == "control_deps") {
           reader->Read(&control_deps);
-        } else if (key == "subgraphs") {
-          this->LoadSubgraphs(reader, &subgraphs);
         } else {
           LOG(FATAL) << "do not support key " << key;
         }
@@ -433,8 +392,6 @@ class GraphRuntime : public ModuleNode {
   uint32_t num_node_entries() const {
     return node_row_ptr_.back();
   }
-  /*! \brief The weight names. */
-  std::vector<std::string> weight_names_;
   /*! \brief The graph nodes. */
   std::vector<Node> nodes_;
   /*! \brief The argument nodes. */
@@ -461,12 +418,6 @@ class GraphRuntime : public ModuleNode {
   std::vector<size_t> data_alignment_;
   /*! \brief Operator on each node. */
   std::vector<std::function<void()> > op_execs_;
-#ifdef TVM_GRAPH_RUNTIME_TENSORRT
-  contrib::TensorRTExecManager tensorrt_exec_manager_;
-#endif  // TVM_GRAPH_RUNTIME_TENSORRT
-
-  /*! \brief Arg info of TVM ops */
-  std::vector<std::shared_ptr<OpArgs> > op_args_;
 };
 
 std::vector<TVMContext> GetAllContext(const TVMArgs& args);

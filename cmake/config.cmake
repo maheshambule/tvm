@@ -132,7 +132,7 @@ set(USE_BLAS none)
 # set(USE_MKL_PATH <path to venv or site-packages directory>) if using `pip install mkl`
 set(USE_MKL_PATH none)
 
-# Whether use MKLDNN library
+# Whether use MKLDNN library, choices: ON, OFF, path to mkldnn library
 set(USE_MKLDNN OFF)
 
 # Whether use OpenMP thread pool, choices: gnu, intel
@@ -154,11 +154,16 @@ set(USE_TFLITE OFF)
 # /path/to/tensorflow: tensorflow root path when use tflite library
 set(USE_TENSORFLOW_PATH none)
 
+# Possible values:
+# - OFF: disable tflite support for edgetpu
+# - /path/to/edgetpu: use specific path to edgetpu library
+set(USE_EDGETPU OFF)
+
 # Whether use CuDNN
-set(USE_CUDNN ON)
+set(USE_CUDNN OFF)
 
 # Whether use cuBLAS
-set(USE_CUBLAS ON)
+set(USE_CUBLAS OFF)
 
 # Whether use MIOpen
 set(USE_MIOPEN OFF)
@@ -171,10 +176,6 @@ set(USE_ROCBLAS OFF)
 
 # Whether use contrib sort
 set(USE_SORT ON)
-
-# Whether use TensorRT
-# /path/to/tensorrt that contains include and lib dirs
-set(USE_TENSORRT OFF)
 
 # Whether use MKL-DNN (DNNL) codegen
 set(USE_DNNL_CODEGEN OFF)

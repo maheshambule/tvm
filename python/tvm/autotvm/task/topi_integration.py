@@ -26,8 +26,9 @@ tuple.
 
 See tvm/topi/python/topi/arm_cpu/depthwise_conv2d.py for example usage.
 """
+import tvm.te._ffi_api
 
-from ... import _api_internal, tensor, placeholder
+from ... import tensor, placeholder
 
 from .task import args_to_workload, dispatcher, register
 from ..util import get_const_tuple
@@ -76,6 +77,7 @@ class TaskExtractEnv:
     registered = None
 
     def __init__(self, allow_duplicate=False):
+        # pylint: disable=import-outside-toplevel
         import topi
 
         # topi compute -> autotvm task name
@@ -93,6 +95,7 @@ class TaskExtractEnv:
             topi.nn.bitserial_dense: "topi_nn_bitserial_dense",
             topi.nn.deformable_conv2d_nchw: "topi_nn_deformable_conv2d_nchw",
             topi.nn.conv1d_transpose_ncw: "topi_nn_conv1d_transpose_ncw",
+            topi.nn.conv3d: "topi_nn_conv3d",
         }
 
         self.topi_to_schedule = {
@@ -111,6 +114,7 @@ class TaskExtractEnv:
             topi.nn.bitserial_dense: [topi.generic.schedule_bitserial_dense],
             topi.nn.deformable_conv2d_nchw: [topi.generic.schedule_deformable_conv2d_nchw],
             topi.nn.conv1d_transpose_ncw: [topi.generic.schedule_conv1d_transpose_ncw],
+            topi.nn.conv3d: [topi.generic.schedule_conv3d_ndhwc],
         }
 
         # function reflection for tracing
@@ -128,6 +132,7 @@ class TaskExtractEnv:
             topi.nn.bitserial_dense:        lambda x: setattr(topi.nn, 'bitserial_dense', x),
             topi.nn.deformable_conv2d_nchw: lambda x: setattr(topi.nn, 'deformable_conv2d_nchw', x),
             topi.nn.conv1d_transpose_ncw:   lambda x: setattr(topi.nn, 'conv1d_transpose_ncw', x),
+            topi.nn.conv3d:                 lambda x: setattr(topi.nn, 'conv3d', x),
         }
 
         self.allow_duplicate = allow_duplicate
@@ -168,6 +173,7 @@ class TaskExtractEnv:
 
     def _register_topi_task(self):
         """register tuning wrapper for topi function"""
+        # pylint: disable=import-outside-toplevel
         import topi
 
         # Avoid double registration for certain targets
@@ -227,6 +233,15 @@ class TaskExtractEnv:
             A, W = args[:2]
             C = topi.nn.conv1d_transpose_ncw(*args, **kwargs)
             s = topi.generic.schedule_conv1d_transpose_ncw([C])
+            return s, [A, W, C]
+
+        @register("topi_nn_conv3d")
+        def _topi_nn_conv3d(*args, **kwargs):
+            assert not kwargs, "Do not support kwargs in template function call"
+            args = deserialize_args(args)
+            A, W = args[:2]
+            C = topi.nn.conv3d(*args, **kwargs)
+            s = topi.generic.schedule_conv3d_ndhwc([C])
             return s, [A, W, C]
 
         @register("topi_nn_dense")
@@ -406,10 +421,10 @@ def register_topi_compute(topi_compute, target_keys, template_keys, func=None, o
                     attrs[k] = v
                 attrs['workload'] = args_to_workload(args, topi_compute)
                 if isinstance(op, tensor.ComputeOp):
-                    op = _api_internal._ComputeOp(
+                    op = tvm.te._ffi_api.ComputeOp(
                         op.name, op.tag, attrs, op.axis, op.body)
                 elif isinstance(op, tensor.ExternOp):
-                    op = _api_internal._ExternOp(
+                    op = tvm.te._ffi_api.ExternOp(
                         op.name, op.tag, attrs,
                         op.inputs, op.input_placeholders,
                         op.output_placeholders, op.body)

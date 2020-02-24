@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * 
+ *
  *   http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -192,7 +192,7 @@ using FIgnoreInputs = std::function<
  * \note Register under "FGradient"
  */
 using FGradient = std::function<std::vector<NodeEntry>(
-    const NodePtr& nodeptr,
+    const ObjectPtr& nodeptr,
     const std::vector<NodeEntry>& out_grads)>;
 
 /*!
@@ -204,7 +204,7 @@ using FGradient = std::function<std::vector<NodeEntry>(
  */
 using FSetInputVarAttrOnCompose = std::function<void(
     const NodeAttrs& attrs,
-    NodePtr var,
+    ObjectPtr var,
     const int index)>;
 
 /*!
@@ -231,35 +231,6 @@ using FCorrectLayout = std::function<bool(
     std::vector<Layout> *ilayouts,
     const std::vector<Layout> *last_ilayouts,
     std::vector<Layout> *olayouts)>;
-
-
-/*!
- * \brief Infer & correct function of node layout. See \p Layout for layout convention
- * \param attrs The attribute of the node. Can be modified.
- * \param ishapes The input shapes inferred by ancestors.
- * \param ilayouts Given the input layouts produced by ancestor nodes,
- *                 it should be filled by layouts that the node requests.
- *                 If the requested layout is different from what ancestor produces,
- *                 a __layout_transform__ operator will be inserted automatically.
- * \param last_ilayouts The input layouts requested by the node
- *                      at the last infer pass (if any).
- *                      This can be useful when an operator wants to keep
- *                      the input layout the same as the original one.
- *                      For example, after the pass of AlterOpLayout,
- *                      transpose(input, axis=[1, 2, 3, 0]) may receive an input of NCHW16c layout,
- *                      with which it cannot calculate with axis=[1, 2, 3, 0].
- *                      Last input layouts allow it to know what the layout it originally inferred,
- *                      i.e., the layout in the imported model.
- * \param olayouts Inferred output layouts.
- * \return success flag.
- */
-using FCorrectLayoutEx = std::function<bool(
-    const NodeAttrs& attrs,
-    std::vector<TShape>* ishapes,
-    std::vector<Layout>* ilayouts,
-    const std::vector<Layout>* last_ilayouts,
-    std::vector<Layout>* olayouts)>;
-
 
 /*!
  * \brief Get a list of inputs that represent graphs instead of data.

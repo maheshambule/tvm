@@ -64,15 +64,15 @@ def winograd_cuda(cfg, data, kernel, strides, padding, dilation, layout, out_dty
         KH = KW = alpha + 1 - tile_size
         assert HSTR == 1 and WSTR == 1 and dilation_h == 1 and dilation_w == 1
 
-    HPAD, WPAD, _, _ = nn.get_pad_tuple(padding, kernel)
-    data_pad = nn.pad(data, (0, 0, HPAD, WPAD), (0, 0, HPAD, WPAD), name="data_pad")
+    pt, pl, pb, pr = nn.get_pad_tuple(padding, (KH, KW))
+    data_pad = nn.pad(data, (0, 0, pt, pl), (0, 0, pb, pr), name="data_pad")
 
     r = KW
     m = tile_size
     A, B, G = winograd_transform_matrices(m, r, out_dtype)
 
-    H = (H + 2 * HPAD - KH) // HSTR + 1
-    W = (W + 2 * WPAD - KW) // WSTR + 1
+    H = (H + pt + pb - KH) // HSTR + 1
+    W = (W + pl + pr - KW) // WSTR + 1
     nH, nW = (H + m-1) // m, (W + m-1) // m
     P = N * nH * nW
 
@@ -194,7 +194,7 @@ def schedule_winograd_cuda(cfg, s, output, pre_computed):
     cfg.define_split("tile_x", x, num_outputs=4)
     cfg.define_split("tile_rc", rc, num_outputs=2)
     cfg.define_knob("auto_unroll_max_step", [0, 128, 1500])
-    target = tvm.target.current_target()
+    target = tvm.target.Target.current()
     if target.target_name in ['nvptx', 'rocm']:
         cfg.define_knob("unroll_explicit", [1])
     else:
@@ -311,7 +311,7 @@ def _alter_conv2d_layout(attrs, inputs, tinfos, F):
 
     Parameters
     ----------
-    attrs : tvm.attrs.Attrs
+    attrs : tvm.ir.Attrs
         Attributes of current convolution
     inputs : tvm.relay.Expr
         Grouped input symbols
@@ -325,11 +325,12 @@ def _alter_conv2d_layout(attrs, inputs, tinfos, F):
     Unlike other TOPI functions, this function operates on both graph level and operator level,
     so we have to pass 'F' to make it support our two versions of graph IR,  Relay.
     """
-    if 'cudnn' in tvm.target.current_target().libs or 'miopen' in tvm.target.current_target().libs:
+    if 'cudnn' in tvm.target.Target.current().libs or 'miopen' in tvm.target.Target.current().libs:
         return None
 
-    copy_inputs = [s for s in inputs]
+    copy_inputs = list(inputs)
     new_attrs = {k: attrs[k] for k in attrs.keys()}
+
 
     new_attrs["channels"] = inputs[1].checked_type.shape[attrs['kernel_layout'].index('O')]
 
@@ -348,7 +349,7 @@ def _alter_conv2d_layout(attrs, inputs, tinfos, F):
     CO, _, KH, KW = get_const_tuple(kernel.shape)
 
     dispatch_ctx = autotvm.DispatchContext.current
-    target = tvm.target.current_target()
+    target = tvm.target.Target.current()
 
     if groups == 1:
         # query config of this workload

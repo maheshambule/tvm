@@ -21,11 +21,10 @@
  * \file upsampling.cc
  * \brief upsampling operator
  */
-#include <tvm/data_layout.h>
+#include <tvm/tir/data_layout.h>
 #include <tvm/relay/op.h>
 #include <tvm/relay/attrs/nn.h>
 #include <tvm/relay/op_attr_types.h>
-#include <tvm/build_module.h>
 #include <vector>
 #include "../op_common.h"
 
@@ -83,12 +82,12 @@ bool UpSamplingRel(const Array<Type>& types,
     << " But got " << in_layout;
 
   auto oshape = layout_converter.ForwardShape(data->shape);
-  oshape.Set(2, ir::Cast::make(oshape[2].dtype(), tvm::round(oshape[2] * param->scale_h)));
-  oshape.Set(3, ir::Cast::make(oshape[3].dtype(), tvm::round(oshape[3] * param->scale_w)));
+  oshape.Set(2, tir::CastNode::make(oshape[2].dtype(), tvm::round(oshape[2] * param->scale_h)));
+  oshape.Set(3, tir::CastNode::make(oshape[3].dtype(), tvm::round(oshape[3] * param->scale_w)));
 
   // assign output type
   reporter->Assign(types[1],
-                   TensorTypeNode::make(layout_converter.BackwardShape(oshape),
+                   TensorType(layout_converter.BackwardShape(oshape),
                                         data->dtype));
   return true;
 }
@@ -102,7 +101,7 @@ Expr MakeUpSampling(Expr data,
                     std::string layout,
                     std::string method,
                     bool align_corners) {
-  auto attrs = make_node<UpSamplingAttrs>();
+  auto attrs = make_object<UpSamplingAttrs>();
   attrs->layout = std::move(layout);
   attrs->method = std::move(method);
   attrs->scale_h = scale_h;
@@ -112,7 +111,7 @@ Expr MakeUpSampling(Expr data,
   return CallNode::make(op, {data}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_API("relay.op.nn._make.upsampling")
+TVM_REGISTER_GLOBAL("relay.op.nn._make.upsampling")
 .set_body_typed(MakeUpSampling);
 
 
@@ -162,13 +161,13 @@ bool UpSampling3DRel(const Array<Type>& types,
     << " But got " << in_layout;
 
   auto oshape = layout_converter.ForwardShape(data->shape);
-  oshape.Set(2, ir::Cast::make(oshape[2].dtype(), tvm::round(oshape[2] * param->scale_d)));
-  oshape.Set(3, ir::Cast::make(oshape[3].dtype(), tvm::round(oshape[3] * param->scale_h)));
-  oshape.Set(4, ir::Cast::make(oshape[4].dtype(), tvm::round(oshape[4] * param->scale_w)));
+  oshape.Set(2, tir::CastNode::make(oshape[2].dtype(), tvm::round(oshape[2] * param->scale_d)));
+  oshape.Set(3, tir::CastNode::make(oshape[3].dtype(), tvm::round(oshape[3] * param->scale_h)));
+  oshape.Set(4, tir::CastNode::make(oshape[4].dtype(), tvm::round(oshape[4] * param->scale_w)));
 
   // assign output type
   reporter->Assign(types[1],
-                   TensorTypeNode::make(layout_converter.BackwardShape(oshape),
+                   TensorType(layout_converter.BackwardShape(oshape),
                                         data->dtype));
   return true;
 }
@@ -182,7 +181,7 @@ Expr MakeUpSampling3D(Expr data,
                       std::string layout,
                       std::string method,
                       std::string coordinate_transformation_mode) {
-  auto attrs = make_node<UpSampling3DAttrs>();
+  auto attrs = make_object<UpSampling3DAttrs>();
   attrs->layout = std::move(layout);
   attrs->method = std::move(method);
   attrs->scale_d = scale_d;
@@ -193,7 +192,7 @@ Expr MakeUpSampling3D(Expr data,
   return CallNode::make(op, {data}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_API("relay.op.nn._make.upsampling3d")
+TVM_REGISTER_GLOBAL("relay.op.nn._make.upsampling3d")
 .set_body_typed(MakeUpSampling3D);
 
 

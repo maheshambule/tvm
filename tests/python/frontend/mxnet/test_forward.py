@@ -200,12 +200,6 @@ def test_forward_ones_like():
     mx_sym = mx.sym.ones_like(data, dtype='float32')
     verify_mxnet_frontend_impl(mx_sym, (2, 3, 4), (2, 3, 4))
 
-def test_forward_make_loss():
-    data = mx.sym.var('data')
-    ones = mx.sym.ones(shape=(2, 3, 4), dtype='float32')
-    mx_sym = mx.sym.make_loss((data-ones)**2/2, dtype='float32')
-    verify_mxnet_frontend_impl(mx_sym, (2, 3, 4), (2, 3, 4))
-
 def test_forward_zeros_like():
     data = mx.sym.var('data')
     mx_sym = mx.sym.zeros_like(data, dtype='float32')
@@ -799,7 +793,7 @@ def test_forward_layer_norm():
             for kind in ["graph", "debug"]:
                 intrp = relay.create_executor(kind, mod=mod, ctx=ctx, target=target)
                 op_res = intrp.evaluate()(x, gamma, beta)
-                tvm.testing.assert_allclose(op_res.asnumpy(), ref_res.asnumpy(), rtol=1e-3)
+                tvm.testing.assert_allclose(op_res.asnumpy(), ref_res.asnumpy(), rtol=1e-3, atol=1e-5)
     verify((2, 5))
     verify((2, 5), axis=0)
     verify((2, 5, 6))
@@ -815,7 +809,7 @@ def test_forward_one_hot():
             for kind in ["graph", "debug"]:
                 intrp = relay.create_executor(kind, mod=mod, ctx=ctx, target=target)
                 op_res = intrp.evaluate()(x.astype("float32"))
-                tvm.testing.assert_allclose(op_res.asnumpy(), ref_res.asnumpy(), rtol=1e-3)
+                tvm.testing.assert_allclose(op_res.asnumpy(), ref_res.asnumpy(), rtol=1e-3, atol=1e-5)
     verify((3,), 3, 1, 0, "int32")
     verify((3,), 3, 1.0, 0.0, "float32")
     verify((2, 2), 5, 2, -2, "int32")
@@ -904,7 +898,7 @@ def test_forward_deconvolution():
             for kind in ["graph", "debug"]:
                 intrp = relay.create_executor(kind, mod=mod, ctx=ctx, target=target)
                 op_res = intrp.evaluate()(x, weight, bias)
-                tvm.testing.assert_allclose(op_res.asnumpy(), ref_res.asnumpy(), rtol=1e-3)
+                tvm.testing.assert_allclose(op_res.asnumpy(), ref_res.asnumpy(), rtol=1e-3, atol=1e-5)
 
     verify(data_shape=(1,1,1024*16), kernel_size=(17,), stride=(2,), pad=(8,), num_filter=4)
     verify(data_shape=(20,1,1024*16), kernel_size=(17,), stride=(2,), pad=(8,), num_filter=4)
@@ -995,4 +989,3 @@ if __name__ == '__main__':
     test_forward_convolution()
     test_forward_deconvolution()
     test_forward_cond()
-    test_forward_make_loss()

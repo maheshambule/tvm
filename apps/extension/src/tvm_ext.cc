@@ -26,10 +26,11 @@
 #include <tvm/runtime/module.h>
 #include <tvm/runtime/registry.h>
 #include <tvm/runtime/ndarray.h>
-#include <tvm/packed_func_ext.h>
 #include <tvm/runtime/device_api.h>
+#include <tvm/tir/op.h>
 
 using namespace tvm;
+using namespace tvm::tir;
 using namespace tvm::runtime;
 
 namespace tvm_ext {
@@ -156,7 +157,7 @@ TVM_REGISTER_GLOBAL("tvm_ext.nd_create")
 .set_body([](TVMArgs args, TVMRetValue *rv) {
   int additional_info = args[0];
   *rv = NDSubClass(additional_info);
-  CHECK_EQ(rv->type_code(), kNDArrayContainer);
+  CHECK_EQ(rv->type_code(), kTVMNDArrayHandle);
 
 });
 

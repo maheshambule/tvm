@@ -152,14 +152,11 @@ class CSourceCodegen : public CSourceModuleCodegenBase {
     code_stream_ << builder.JIT();
   }
 
-  runtime::Module CreateCSourceModule(const NodeRef& ref) override {
+  runtime::Module CreateCSourceModule(const ObjectRef& ref) override {
     // Create headers
-    code_stream_ << "#include <cstdint>\n";
-    code_stream_ << "#include <iostream>\n";
-    code_stream_ << "#include <cstdlib>\n";
-    code_stream_ << "#include <stdio.h>\n";
     code_stream_ << "#include <cstring>\n";
     code_stream_ << "#include <tvm/runtime/c_runtime_api.h>\n";
+    code_stream_ << "#include <tvm/runtime/packed_func.h>\n";
     code_stream_ << "#include <dlpack/dlpack.h>\n";
 
     // Append some common macro for operator definition.
@@ -170,7 +167,7 @@ class CSourceCodegen : public CSourceModuleCodegenBase {
           out[i] = a[i] p_OP_ b[i];                           \
         }                                                     \
       }
-    
+
     #define CSOURCE_BINARY_OP_2D(p_ID_, p_OP_, p_DIM1_, p_DIM2_)  \
       extern "C" void p_ID_(float* a, float* b, float* out) {     \
         for (int64_t i = 0; i < p_DIM1_; ++i) {                   \
@@ -186,8 +183,8 @@ class CSourceCodegen : public CSourceModuleCodegenBase {
 
     if (ref->IsInstance<FunctionNode>()) {
       GenCFunc(Downcast<Function>(ref));
-    } else if (ref->IsInstance<relay::ModuleNode>()) {
-      relay::Module mod = Downcast<relay::Module>(ref);
+    } else if (ref->IsInstance<IRModuleNode>()) {
+      IRModule mod = Downcast<IRModule>(ref);
       for (const auto& it : mod->functions) {
         GenCFunc(Downcast<Function>(it.second));
       }
@@ -197,7 +194,7 @@ class CSourceCodegen : public CSourceModuleCodegenBase {
     }
 
     // Create a CSourceModule
-    const auto* pf = runtime::Registry::Get("module.csource_module_create");
+    const auto* pf = runtime::Registry::Get("runtime.CSourceModuleCreate");
     CHECK(pf != nullptr) << "Cannot find csource module to create the external runtime module";
     return (*pf)(code_stream_.str(), "cc");
   }
@@ -214,12 +211,12 @@ class CSourceCodegen : public CSourceModuleCodegenBase {
  * CUDA, etc, under TVM, so the generated code could be packed in a runtime
  * module. This module simplifies code serialization and invocation.
  */
-runtime::Module CCompiler(const NodeRef& ref) {
+runtime::Module CCompiler(const ObjectRef& ref) {
   CSourceCodegen csource;
   return csource.CreateCSourceModule(ref);
 }
 
-TVM_REGISTER_API("relay.ext.ccompiler").set_body_typed(CCompiler);
+TVM_REGISTER_GLOBAL("relay.ext.ccompiler").set_body_typed(CCompiler);
 
 }  // namespace contrib
 }  // namespace relay

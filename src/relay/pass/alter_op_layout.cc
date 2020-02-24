@@ -28,7 +28,7 @@
 #include <tvm/relay/op_attr_types.h>
 #include <tvm/relay/attrs/transform.h>
 #include <tvm/relay/transform.h>
-#include <tvm/operation.h>
+#include <tvm/te/operation.h>
 #include <tuple>
 #include <vector>
 #include <functional>
@@ -78,10 +78,10 @@ class AlterTransformMemorizer : public TransformMemorizer {
     Expr new_e;
     bool modified = false;
     if (falter_layout.count(op)) {
-      tvm::Array<tvm::Tensor> tinfos;
+      tvm::Array<tvm::te::Tensor> tinfos;
       for (auto expr : ref_call->args) {
         auto ttype = expr->type_as<TensorTypeNode>();
-        tinfos.push_back(tvm::placeholder(ttype->shape, ttype->dtype));
+        tinfos.push_back(tvm::te::placeholder(ttype->shape, ttype->dtype));
       }
       Expr altered_value = falter_layout[op](ref_call->attrs, new_args, tinfos);
       if (altered_value.defined()) {
@@ -107,8 +107,8 @@ class AlterTransformMemorizer : public TransformMemorizer {
  * 2. Do not support nested tuple arguments.
  */
 Expr AlterOpLayout(const Expr& expr) {
-  AlterTransformMemorizer alterMemorizer(make_node<AlterTransformMemorizerNode>());
-  auto fcontext = [&](const Call& call) -> NodeRef { return alterMemorizer; };
+  AlterTransformMemorizer alterMemorizer(make_object<AlterTransformMemorizerNode>());
+  auto fcontext = [&](const Call& call) -> ObjectRef { return alterMemorizer; };
 
   return ForwardRewrite(expr, LayoutRewriter<AlterTransformMemorizer>, fcontext);
 }
@@ -118,15 +118,15 @@ Expr AlterOpLayout(const Expr& expr) {
 namespace transform {
 
 Pass AlterOpLayout() {
-  runtime::TypedPackedFunc<Function(Function, Module, PassContext)> pass_func =
-    [=](Function f, Module m, PassContext pc) {
+  runtime::TypedPackedFunc<Function(Function, IRModule, PassContext)> pass_func =
+    [=](Function f, IRModule m, PassContext pc) {
       return Downcast<Function>(relay::alter_op_layout::AlterOpLayout(f));
   };
   return CreateFunctionPass(pass_func, 3, "AlterOpLayout",
-                            {ir::StringImm::make("InferType")});
+                            {tir::StringImmNode::make("InferType")});
 }
 
-TVM_REGISTER_API("relay._transform.AlterOpLayout")
+TVM_REGISTER_GLOBAL("relay._transform.AlterOpLayout")
 .set_body_typed(AlterOpLayout);
 
 }  // namespace transform

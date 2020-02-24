@@ -23,27 +23,27 @@
  */
 #include <dmlc/json.h>
 #include <dmlc/memory_io.h>
-
+#include <tvm/runtime/registry.h>
 #include <tvm/runtime/ndarray.h>
 #include <tvm/runtime/packed_func.h>
 #include <tvm/node/container.h>
 #include <tvm/node/reflection.h>
 #include <tvm/node/serialization.h>
-#include <tvm/attrs.h>
+#include <tvm/ir/attrs.h>
 
 #include <string>
 #include <map>
 
-#include "../common/base64.h"
+#include "../support/base64.h"
 
 namespace tvm {
 
 inline std::string Type2String(const DataType& t) {
-  return runtime::TVMType2String(t);
+  return runtime::DLDataType2String(t);
 }
 
 inline DataType String2Type(std::string s) {
-  return DataType(runtime::String2TVMType(s));
+  return DataType(runtime::String2DLDataType(s));
 }
 
 // indexer to index all the nodes
@@ -79,7 +79,7 @@ class NodeIndexer : public AttrVisitor {
   // make index of all the children of node
   void MakeIndex(Object* node) {
     if (node == nullptr) return;
-    CHECK(node->IsInstance<Node>());
+    CHECK(node->IsInstance<Object>());
 
     if (node_index_.count(node)) return;
     CHECK_EQ(node_index_.size(), node_list_.size());
@@ -392,7 +392,7 @@ struct JSONGraph {
     for (DLTensor* tensor : indexer.tensor_list_) {
       std::string blob;
       dmlc::MemoryStringStream mstrm(&blob);
-      common::Base64OutStream b64strm(&mstrm);
+      support::Base64OutStream b64strm(&mstrm);
       runtime::SaveDLTensor(&b64strm, tensor);
       b64strm.Finish();
       g.b64ndarrays.emplace_back(std::move(blob));
@@ -420,7 +420,7 @@ ObjectRef LoadJSON(std::string json_str) {
   // load in tensors
   for (const std::string& blob : jgraph.b64ndarrays) {
     dmlc::MemoryStringStream mstrm(const_cast<std::string*>(&blob));
-    common::Base64InStream b64strm(&mstrm);
+    support::Base64InStream b64strm(&mstrm);
     b64strm.InitPosition();
     runtime::NDArray temp;
     CHECK(temp.Load(&b64strm));
@@ -455,4 +455,10 @@ ObjectRef LoadJSON(std::string json_str) {
   }
   return ObjectRef(nodes.at(jgraph.root));
 }
+
+TVM_REGISTER_GLOBAL("node.SaveJSON")
+.set_body_typed(SaveJSON);
+
+TVM_REGISTER_GLOBAL("node.LoadJSON")
+.set_body_typed(LoadJSON);
 }  // namespace tvm

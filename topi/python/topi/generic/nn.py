@@ -22,7 +22,7 @@ from .. import cpp
 
 def _default_schedule(outs, auto_inline):
     """Default schedule for llvm."""
-    target = tvm.target.current_target(allow_none=False)
+    target = tvm.target.Target.current(allow_none=False)
     outs = [outs] if isinstance(outs, tvm.tensor.Tensor) else outs
     if target.target_name not in ("llvm", "c"):
         raise RuntimeError("schedule not registered for '%s'" % target)
@@ -32,6 +32,42 @@ def _default_schedule(outs, auto_inline):
         tvm.schedule.AutoInlineInjective(s)
         s[x].fuse(s[x].op.axis)
     return s
+
+
+@tvm.target.generic_func
+def schedule_conv1d_ncw(outs):
+    """Schedule for conv1d_ncw
+
+    Parameters
+    ----------
+    outs: Array of Tensor
+          The computation graph description of conv1d_ncw
+          in the format of an array of tensors.
+
+    Returns
+    -------
+    sch: Schedule
+        The computation schedule for the op.
+    """
+    return _default_schedule(outs, False)
+
+
+@tvm.target.generic_func
+def schedule_conv1d_nwc(outs):
+    """Schedule for conv1d_nwc
+
+    Parameters
+    ----------
+    outs: Array of Tensor
+          The computation graph description of conv1d_nwc
+          in the format of an array of tensors.
+
+    Returns
+    -------
+    sch: Schedule
+        The computation schedule for the op.
+    """
+    return _default_schedule(outs, False)
 
 
 @tvm.target.generic_func
@@ -242,6 +278,22 @@ def schedule_conv3d_ncdhw(outs):
     """
     return _default_schedule(outs, False)
 
+@tvm.target.generic_func
+def schedule_conv3d_ndhwc(outs):
+    """Schedule for conv3d_ndhwc
+
+    Parameters
+    ----------
+    outs: Array of Tensor
+          The computation graph description of conv3d_ndhwc
+          in the format of an array of tensors.
+
+    Returns
+    -------
+    sch: Schedule
+        The computation schedule for the op.
+    """
+    return _default_schedule(outs, False)
 
 @tvm.target.generic_func
 def schedule_conv2d_transpose_nchw(outs):
@@ -593,28 +645,10 @@ def schedule_lrn(outs):
     sch: Schedule
         The computation schedule for the op.
     """
-    target = tvm.target.current_target(allow_none=False)
+    target = tvm.target.Target.current(allow_none=False)
     cpp_target = cpp.TEST_create_target(target.target_name)
     return cpp.generic.default_schedule(cpp_target, outs, False)
 
-@tvm.target.generic_func
-def schedule_l2_normalize(outs):
-    """Schedule for l2 normalize
-
-    Parameters
-    ----------
-    outs: Array of Tensor
-          The computation graph description of l2 normalize
-          in the format of an array of tensors.
-
-    Returns
-    -------
-    sch: Schedule
-        The computation schedule for the op.
-    """
-    target = tvm.target.current_target(allow_none=False)
-    cpp_target = cpp.TEST_create_target(target.target_name)
-    return cpp.generic.default_schedule(cpp_target, outs, False)
 
 @tvm.target.generic_func
 def schedule_sparse_dense(outs):
@@ -652,6 +686,6 @@ def schedule_sparse_transpose(outs):
 
 @tvm.target.generic_func
 def schedule_batch_matmul(outs):
-    target = tvm.target.current_target(allow_none=False)
+    target = tvm.target.Target.current(allow_none=False)
     cpp_target = cpp.TEST_create_target(target.target_name)
     return cpp.generic.default_schedule(cpp_target, outs, False)

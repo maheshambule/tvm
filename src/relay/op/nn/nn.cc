@@ -22,7 +22,7 @@
  * \brief Property def of nn operators.
  */
 
-#include <tvm/data_layout.h>
+#include <tvm/tir/data_layout.h>
 #include <tvm/relay/op.h>
 #include <tvm/relay/attrs/nn.h>
 #include <tvm/relay/attrs/image.h>
@@ -61,7 +61,7 @@ bool BiasAddRel(const Array<Type>& types,
       << "axis " << param->axis << " is out of range";
 
   // assign output type
-  reporter->Assign(types[1], TensorTypeNode::make(
+  reporter->Assign(types[1], TensorType(
       {data->shape[axis]}, data->dtype));
   reporter->Assign(types[2], types[0]);
   return true;
@@ -72,14 +72,14 @@ bool BiasAddRel(const Array<Type>& types,
 Expr MakeBiasAdd(Expr data,
                  Expr bias,
                  int axis) {
-  auto attrs = make_node<BiasAddAttrs>();
+  auto attrs = make_object<BiasAddAttrs>();
   attrs->axis = axis;
   static const Op& op = Op::Get("nn.bias_add");
   return CallNode::make(op, {data, bias}, Attrs(attrs), {});
 }
 
 
-TVM_REGISTER_API("relay.op.nn._make.bias_add")
+TVM_REGISTER_GLOBAL("relay.op.nn._make.bias_add")
 .set_body_typed(MakeBiasAdd);
 
 
@@ -93,10 +93,10 @@ RELAY_REGISTER_OP("nn.bias_add")
 .add_argument("bias", "1D Tensor", "Bias.")
 .set_support_level(1)
 .add_type_rel("BiasAdd", BiasAddRel)
-.set_attr<FTVMCompute>("FTVMCompute", [](const Attrs& attrs, const Array<Tensor>& inputs,
+.set_attr<FTVMCompute>("FTVMCompute", [](const Attrs& attrs, const Array<te::Tensor>& inputs,
                                         const Type& out_type, const Target& target) {
     const auto* param = attrs.as<BiasAddAttrs>();
-    return tvm::Array<tvm::Tensor>{topi::nn::bias_add(inputs[0], inputs[1], param->axis)};
+    return tvm::Array<tvm::te::Tensor>{topi::nn::bias_add(inputs[0], inputs[1], param->axis)};
 });
 
 
@@ -104,7 +104,7 @@ RELAY_REGISTER_OP("nn.bias_add")
 TVM_REGISTER_NODE_TYPE(FIFOBufferAttrs);
 
 Expr MakeFIFOBuffer(Expr input, Expr buffer, int axis) {
-  auto attrs = make_node<FIFOBufferAttrs>();
+  auto attrs = make_object<FIFOBufferAttrs>();
   attrs->axis = axis;
   static const Op& op = Op::Get("nn.fifo_buffer");
   return CallNode::make(op, {input, buffer}, Attrs(attrs), {});
@@ -136,13 +136,13 @@ bool FIFOBufferRel(const Array<Type>& types,
   }
   reporter->Assert(input->shape[buffer_axis] < buffer->shape[buffer_axis]);
 
-  Array<tvm::Expr> oshape = buffer->shape;
+  Array<tvm::PrimExpr> oshape = buffer->shape;
 
-  reporter->Assign(types[2], TensorTypeNode::make(oshape, buffer->dtype));
+  reporter->Assign(types[2], TensorType(oshape, buffer->dtype));
   return true;
 }
 
-TVM_REGISTER_API("relay.op.nn._make.fifo_buffer")
+TVM_REGISTER_GLOBAL("relay.op.nn._make.fifo_buffer")
 .set_body_typed(MakeFIFOBuffer);
 
 RELAY_REGISTER_OP("nn.fifo_buffer")
@@ -175,7 +175,7 @@ Expr MakeDense(Expr data,
                Expr weight,
                IndexExpr units,
                DataType out_dtype) {
-  auto attrs = make_node<DenseAttrs>();
+  auto attrs = make_object<DenseAttrs>();
   attrs->units = units;
   attrs->out_dtype = out_dtype;
   static const Op& op = Op::Get("nn.dense");
@@ -183,7 +183,7 @@ Expr MakeDense(Expr data,
 }
 
 
-TVM_REGISTER_API("relay.op.nn._make.dense")
+TVM_REGISTER_GLOBAL("relay.op.nn._make.dense")
 .set_body_typed(MakeDense);
 
 
@@ -208,14 +208,14 @@ TVM_REGISTER_NODE_TYPE(LeakyReluAttrs);
 // Positional relay function to create leaky relu operator used by frontend FFI.
 Expr MakeLeakyRelu(Expr data,
                    double alpha) {
-  auto attrs = make_node<LeakyReluAttrs>();
+  auto attrs = make_object<LeakyReluAttrs>();
   attrs->alpha = alpha;
   static const Op& op = Op::Get("nn.leaky_relu");
   return CallNode::make(op, {data}, Attrs(attrs), {});
 }
 
 
-TVM_REGISTER_API("relay.op.nn._make.leaky_relu")
+TVM_REGISTER_GLOBAL("relay.op.nn._make.leaky_relu")
 .set_body_typed(MakeLeakyRelu);
 
 
@@ -233,11 +233,11 @@ RELAY_REGISTER_OP("nn.leaky_relu")
 .set_attr<FInferCorrectLayout>("FInferCorrectLayout", ElemwiseArbitraryLayout)
 .set_attr<FTVMCompute>(
   "FTVMCompute", [](const Attrs& attrs,
-                    const Array<Tensor>& inputs,
+                    const Array<te::Tensor>& inputs,
                     const Type& out_type,
                     const Target& target) {
     const auto* param = attrs.as<LeakyReluAttrs>();
-    return Array<Tensor>{ topi::leaky_relu(inputs[0], param->alpha) };
+    return Array<te::Tensor>{ topi::leaky_relu(inputs[0], param->alpha) };
 });
 
 
@@ -260,10 +260,10 @@ bool PReluRel(const Array<Type>& types,
 
   // assign alpha type
   Array<IndexExpr> alpha_shape({data->shape[param->axis]});
-  reporter->Assign(types[1], TensorTypeNode::make(alpha_shape, data->dtype));
+  reporter->Assign(types[1], TensorType(alpha_shape, data->dtype));
 
   // assign output type
-  reporter->Assign(types[2], TensorTypeNode::make(data->shape, data->dtype));
+  reporter->Assign(types[2], TensorType(data->shape, data->dtype));
   return true;
 }
 
@@ -288,14 +288,14 @@ Array<Array<Layout> > PReluInferCorrectLayout(
 Expr MakePRelu(Expr data,
                Expr alpha,
                int axis) {
-  auto attrs = make_node<PReluAttrs>();
+  auto attrs = make_object<PReluAttrs>();
   attrs->axis = axis;
   static const Op& op = Op::Get("nn.prelu");
   return CallNode::make(op, {data, alpha}, Attrs(attrs), {});
 }
 
 
-TVM_REGISTER_API("relay.op.nn._make.prelu")
+TVM_REGISTER_GLOBAL("relay.op.nn._make.prelu")
 .set_body_typed(MakePRelu);
 
 
@@ -314,20 +314,20 @@ where :math:`*` is an channelwise multiplication for each sample in the batch.
 .set_attr<FInferCorrectLayout>("FInferCorrectLayout", PReluInferCorrectLayout<PReluAttrs>)
 .set_attr<FTVMCompute>(
   "FTVMCompute", [](const Attrs& attrs,
-                    const Array<Tensor>& inputs,
+                    const Array<te::Tensor>& inputs,
                     const Type& out_type,
                     const Target& target) {
     const auto* param = attrs.as<PReluAttrs>();
-    return Array<Tensor>{ topi::prelu(inputs[0], inputs[1], param->axis)};
+    return Array<te::Tensor>{ topi::prelu(inputs[0], inputs[1], param->axis)};
 });
 
 
 // relay.softmax
 TVM_REGISTER_NODE_TYPE(SoftmaxAttrs);
 
-TVM_REGISTER_API("relay.op.nn._make.softmax")
-.set_body_typed<Call(Expr, int)>([](Expr data, int axis) {
-  auto attrs = make_node<SoftmaxAttrs>();
+TVM_REGISTER_GLOBAL("relay.op.nn._make.softmax")
+.set_body_typed([](Expr data, int axis) {
+  auto attrs = make_object<SoftmaxAttrs>();
   attrs->axis = axis;
   static const Op& op = Op::Get("nn.softmax");
   return CallNode::make(op, {data}, Attrs(attrs), {});
@@ -350,19 +350,19 @@ RELAY_REGISTER_OP("nn.softmax")
 .set_support_level(1)
 .add_type_rel("Identity", IdentityRel)
 .set_attr<FTVMCompute>("FTVMCompute", [](const Attrs& attrs,
-                                         const Array<Tensor>& inputs,
+                                         const Array<te::Tensor>& inputs,
                                          const Type& out_type,
                                          const Target& target) {
   const auto* param = attrs.as<SoftmaxAttrs>();
   CHECK(param != nullptr);
-  return Array<Tensor>{ topi::nn::softmax(inputs[0], param->axis) };
+  return Array<te::Tensor>{ topi::nn::softmax(inputs[0], param->axis) };
 });
 
 
 // relay.nn.log_softmax
-TVM_REGISTER_API("relay.op.nn._make.log_softmax")
-.set_body_typed<Call(Expr, int)>([](Expr data, int axis) {
-  auto attrs = make_node<SoftmaxAttrs>();
+TVM_REGISTER_GLOBAL("relay.op.nn._make.log_softmax")
+.set_body_typed([](Expr data, int axis) {
+  auto attrs = make_object<SoftmaxAttrs>();
   attrs->axis = axis;
   static const Op& op = Op::Get("nn.log_softmax");
   return CallNode::make(op, {data}, Attrs(attrs), {});
@@ -384,14 +384,14 @@ RELAY_REGISTER_OP("nn.log_softmax")
 .set_support_level(1)
 .add_type_rel("Identity", IdentityRel)
 .set_attr<FTVMCompute>("FTVMCompute", [](const Attrs& attrs,
-                                         const Array<Tensor>& inputs,
+                                         const Array<te::Tensor>& inputs,
                                          const Type& out_type,
                                          const Target& target) {
   const auto* param = attrs.as<SoftmaxAttrs>();
   CHECK(param != nullptr);
   CHECK(param->axis == -1 || param->axis == static_cast<int32_t>(inputs[0].ndim()) - 1)
       << "log_softmax currently only works on last dimension";
-  return Array<Tensor>{ topi::nn::log_softmax(inputs[0]) };
+  return Array<te::Tensor>{ topi::nn::log_softmax(inputs[0]) };
 });
 
 
@@ -405,10 +405,10 @@ bool BatchFlattenRel(const Array<Type>& types,
   if (data == nullptr) return false;
   if (data->shape.size() == 0) return false;
 
-  auto target_dim = make_const(DataType::Int(32), 1);
+  auto target_dim = tir::make_const(DataType::Int(32), 1);
 
   for (uint32_t i = 1; i < data->shape.size(); ++i) {
-    if (!data->shape[i].as<ir::Any>()) {
+    if (!data->shape[i].as<tir::AnyNode>()) {
       target_dim = target_dim * data->shape[i];
     } else {
       target_dim = data->shape[i];
@@ -419,7 +419,7 @@ bool BatchFlattenRel(const Array<Type>& types,
   std::vector<IndexExpr> oshape({data->shape[0], target_dim});
 
   // assign output type
-  reporter->Assign(types[1], TensorTypeNode::make(oshape, data->dtype));
+  reporter->Assign(types[1], TensorType(oshape, data->dtype));
   return true;
 }
 
@@ -429,7 +429,7 @@ Expr MakeBatchFlatten(Expr data) {
 }
 
 
-TVM_REGISTER_API("relay.op.nn._make.batch_flatten")
+TVM_REGISTER_GLOBAL("relay.op.nn._make.batch_flatten")
 .set_body_typed(MakeBatchFlatten);
 
 
@@ -461,16 +461,16 @@ Example::
 .add_type_rel("BatchFlatten", BatchFlattenRel)
 .set_attr<FTVMCompute>(
   "FTVMCompute", [](const Attrs& attrs,
-                    const Array<Tensor>& inputs,
+                    const Array<te::Tensor>& inputs,
                     const Type& out_type,
                     const Target& target) {
-    return Array<Tensor>{ topi::nn::flatten(inputs[0]) };
+    return Array<te::Tensor>{ topi::nn::flatten(inputs[0]) };
 });
 
 
 // relu
-TVM_REGISTER_API("relay.op.nn._make.relu")
-.set_body_typed<Call(Expr)>([](Expr data) {
+TVM_REGISTER_GLOBAL("relay.op.nn._make.relu")
+.set_body_typed([](Expr data) {
     static const Op& op = Op::Get("nn.relu");
     return CallNode::make(op, {data}, Attrs(), {});
   });
@@ -488,10 +488,10 @@ RELAY_REGISTER_OP("nn.relu")
 .add_type_rel("Identity", IdentityRel)
 .set_attr<FInferCorrectLayout>("FInferCorrectLayout", ElemwiseArbitraryLayout)
 .set_attr<FTVMCompute>("FTVMCompute", [](const Attrs& attrs,
-                                         const Array<Tensor>& inputs,
+                                         const Array<te::Tensor>& inputs,
                                          const Type& out_type,
                                          const Target& target) {
-  return Array<Tensor>{ topi::relu(inputs[0], 0.0f) };
+  return Array<te::Tensor>{ topi::relu(inputs[0], 0.0f) };
 });
 
 
@@ -504,7 +504,7 @@ Expr MakeLRN(Expr data,
              double alpha,
              double beta,
              double bias) {
-  auto attrs = make_node<LRNAttrs>();
+  auto attrs = make_object<LRNAttrs>();
   attrs->size = size;
   attrs->axis = axis;
   attrs->alpha = alpha;
@@ -514,7 +514,7 @@ Expr MakeLRN(Expr data,
   return CallNode::make(op, {data}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_API("relay.op.nn._make.lrn")
+TVM_REGISTER_GLOBAL("relay.op.nn._make.lrn")
 .set_body_typed(MakeLRN);
 
 RELAY_REGISTER_OP("nn.lrn")
@@ -545,14 +545,14 @@ TVM_REGISTER_NODE_TYPE(L2NormalizeAttrs);
 Expr MakeL2Normalize(Expr data,
                      double eps,
                      Array<Integer> axis) {
-  auto attrs = make_node<L2NormalizeAttrs>();
+  auto attrs = make_object<L2NormalizeAttrs>();
   attrs->eps = eps;
   attrs->axis = std::move(axis);
   static const Op& op = Op::Get("nn.l2_normalize");
   return CallNode::make(op, {data}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_API("relay.op.nn._make.l2_normalize")
+TVM_REGISTER_GLOBAL("relay.op.nn._make.l2_normalize")
 .set_body_typed(MakeL2Normalize);
 
 RELAY_REGISTER_OP("nn.l2_normalize")
@@ -585,19 +585,19 @@ bool DropoutRel(const Array<Type>& types,
 
   // dropout returns the original tensor with dropout applied
   // and a mask tensor (1.0 where element not dropped, 0.0 where dropped)
-  auto ret_type = TensorTypeNode::make(data->shape, data->dtype);
-  reporter->Assign(types[1], TupleTypeNode::make(Array<Type>({ret_type, ret_type})));
+  auto ret_type = TensorType(data->shape, data->dtype);
+  reporter->Assign(types[1], TupleType(Array<Type>({ret_type, ret_type})));
   return true;
 }
 
 Expr MakeDropout(Expr data, double rate) {
-  auto attrs = make_node<DropoutAttrs>();
+  auto attrs = make_object<DropoutAttrs>();
   attrs->rate = rate;
   static const Op& op = Op::Get("nn.dropout");
   return CallNode::make(op, {data}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_API("relay.op.nn._make.dropout")
+TVM_REGISTER_GLOBAL("relay.op.nn._make.dropout")
 .set_body_typed(MakeDropout);
 
 RELAY_REGISTER_OP("nn.dropout")
@@ -661,26 +661,26 @@ bool BatchNormRel(const Array<Type>& types,
   auto axis_size = data->shape[axis];
 
   // if we are using beta and gamma, they need to be of shape (dim,)
-  reporter->Assign(types[1], TensorTypeNode::make({axis_size}, data->dtype));
-  reporter->Assign(types[2], TensorTypeNode::make({axis_size}, data->dtype));
-  reporter->Assign(types[3], TensorTypeNode::make({axis_size}, data->dtype));
-  reporter->Assign(types[4], TensorTypeNode::make({axis_size}, data->dtype));
+  reporter->Assign(types[1], TensorType({axis_size}, data->dtype));
+  reporter->Assign(types[2], TensorType({axis_size}, data->dtype));
+  reporter->Assign(types[3], TensorType({axis_size}, data->dtype));
+  reporter->Assign(types[4], TensorType({axis_size}, data->dtype));
 
   // output is a tuple of the normed data (same shape as input), new running mean,
   // and new running average (the latter two are both vectors of length dim)
   std::vector<Type> fields;
-  auto vec_ty = TensorTypeNode::make(Array<IndexExpr>({data->shape[axis]}),
+  auto vec_ty = TensorType(Array<IndexExpr>({data->shape[axis]}),
                                      data->dtype);
-  fields.push_back(TensorTypeNode::make(data->shape, data->dtype));
+  fields.push_back(TensorType(data->shape, data->dtype));
   fields.push_back(vec_ty);
   fields.push_back(vec_ty);
-  reporter->Assign(types[5], TupleTypeNode::make(Array<Type>(fields)));
+  reporter->Assign(types[5], TupleType(Array<Type>(fields)));
   return true;
 }
 
 Expr MakeBatchNorm(Expr data, Expr gamma, Expr beta, Expr moving_mean, Expr moving_var,
                    int axis, double epsilon, bool center, bool scale) {
-  auto attrs = make_node<BatchNormAttrs>();
+  auto attrs = make_object<BatchNormAttrs>();
   attrs->axis = axis;
   attrs->epsilon = epsilon;
   attrs->center = center;
@@ -689,7 +689,7 @@ Expr MakeBatchNorm(Expr data, Expr gamma, Expr beta, Expr moving_mean, Expr movi
   return CallNode::make(op, {data, gamma, beta, moving_mean, moving_var}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_API("relay.op.nn._make.batch_norm")
+TVM_REGISTER_GLOBAL("relay.op.nn._make.batch_norm")
 .set_body_typed(MakeBatchNorm);
 
 RELAY_REGISTER_OP("nn.batch_norm")
@@ -754,16 +754,16 @@ bool InstanceNormRel(const Array<Type>& types,
   const InstanceNormAttrs* param = attrs.as<InstanceNormAttrs>();
   int axis = param->axis >= 0 ? param->axis : param->axis + data->shape.size();
   CHECK(axis >= 0 && axis < (int)data->shape.size());
-  reporter->Assign(types[1], TensorTypeNode::make({data->shape[axis]}, data->dtype));
-  reporter->Assign(types[2], TensorTypeNode::make({data->shape[axis]}, data->dtype));
-  reporter->Assign(types[3], TensorTypeNode::make(data->shape, data->dtype));
+  reporter->Assign(types[1], TensorType({data->shape[axis]}, data->dtype));
+  reporter->Assign(types[2], TensorType({data->shape[axis]}, data->dtype));
+  reporter->Assign(types[3], TensorType(data->shape, data->dtype));
 
   return true;
 }
 
 Expr MakeInstanceNorm(Expr data, Expr gamma, Expr beta, int axis, double epsilon,
                       bool center, bool scale) {
-  auto attrs = make_node<InstanceNormAttrs>();
+  auto attrs = make_object<InstanceNormAttrs>();
   attrs->axis = axis;
   attrs->epsilon = epsilon;
   attrs->center = center;
@@ -772,7 +772,7 @@ Expr MakeInstanceNorm(Expr data, Expr gamma, Expr beta, int axis, double epsilon
   return CallNode::make(op, {data, gamma, beta}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_API("relay.op.nn._make.instance_norm")
+TVM_REGISTER_GLOBAL("relay.op.nn._make.instance_norm")
 .set_body([](const TVMArgs& args, TVMRetValue* rv) {
     runtime::detail::unpack_call<Expr, 7>(MakeInstanceNorm, args, rv);
   });
@@ -824,16 +824,16 @@ bool LayerNormRel(const Array<Type>& types,
   const LayerNormAttrs* param = attrs.as<LayerNormAttrs>();
   int axis = param->axis >= 0 ? param->axis : param->axis + data->shape.size();
   CHECK(axis >= 0 && axis < (int)data->shape.size());
-  reporter->Assign(types[1], TensorTypeNode::make({data->shape[axis]}, data->dtype));
-  reporter->Assign(types[2], TensorTypeNode::make({data->shape[axis]}, data->dtype));
-  reporter->Assign(types[3], TensorTypeNode::make(data->shape, data->dtype));
+  reporter->Assign(types[1], TensorType({data->shape[axis]}, data->dtype));
+  reporter->Assign(types[2], TensorType({data->shape[axis]}, data->dtype));
+  reporter->Assign(types[3], TensorType(data->shape, data->dtype));
 
   return true;
 }
 
 Expr MakeLayerNorm(Expr data, Expr gamma, Expr beta, int axis, double epsilon,
                    bool center, bool scale) {
-  auto attrs = make_node<LayerNormAttrs>();
+  auto attrs = make_object<LayerNormAttrs>();
   attrs->axis = axis;
   attrs->epsilon = epsilon;
   attrs->center = center;
@@ -842,7 +842,7 @@ Expr MakeLayerNorm(Expr data, Expr gamma, Expr beta, int axis, double epsilon,
   return CallNode::make(op, {data, gamma, beta}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_API("relay.op.nn._make.layer_norm")
+TVM_REGISTER_GLOBAL("relay.op.nn._make.layer_norm")
 .set_body([](const TVMArgs& args, TVMRetValue* rv) {
     runtime::detail::unpack_call<Expr, 7>(MakeLayerNorm, args, rv);
   });
@@ -877,11 +877,11 @@ bool BatchMatmulRel(const Array<Type>& types,
       << " x shape=" << x->shape
       << ", y shape=" << y->shape;
 
-  Array<tvm::Expr> oshape = x->shape;
+  Array<tvm::PrimExpr> oshape = x->shape;
   oshape.Set(2, y->shape[1]);
 
   // assign output type
-  reporter->Assign(types[2], TensorTypeNode::make(oshape, x->dtype));
+  reporter->Assign(types[2], TensorType(oshape, x->dtype));
   return true;
 }
 
@@ -894,7 +894,7 @@ Expr MakeBatchMatmul(Expr x,
 }
 
 
-TVM_REGISTER_API("relay.op.nn._make.batch_matmul")
+TVM_REGISTER_GLOBAL("relay.op.nn._make.batch_matmul")
 .set_body_typed(MakeBatchMatmul);
 
 
@@ -940,7 +940,7 @@ bool CrossEntropyRel(const Array<Type>& types,
     << "x shape = " << x->shape << ", "
     << "y shape = " << y->shape;
   // assign output type
-  reporter->Assign(types[2], TensorTypeNode::make({}, x->dtype));
+  reporter->Assign(types[2], TensorType({}, x->dtype));
   return true;
 }
 
@@ -951,7 +951,7 @@ Expr MakeCrossEntropy(Expr predictions, Expr targets) {
 }
 
 
-TVM_REGISTER_API("relay.op.nn._make.cross_entropy")
+TVM_REGISTER_GLOBAL("relay.op.nn._make.cross_entropy")
 .set_body_typed(MakeCrossEntropy);
 
 
@@ -974,7 +974,7 @@ Expr MakeCrossEntropyWithLogits(Expr predictions, Expr targets) {
 }
 
 
-TVM_REGISTER_API("relay.op.nn._make.cross_entropy_with_logits")
+TVM_REGISTER_GLOBAL("relay.op.nn._make.cross_entropy_with_logits")
 .set_body_typed(MakeCrossEntropyWithLogits);
 
 
@@ -1016,7 +1016,7 @@ bool DepthToSpaceRel(const Array<Type>& types, int num_inputs, const Attrs& attr
 
   // Assign output type
   reporter->Assign(types[1],
-                   TensorTypeNode::make(layout_converter.BackwardShape(oshape), data->dtype));
+                   TensorType(layout_converter.BackwardShape(oshape), data->dtype));
 
   return true;
 }
@@ -1024,7 +1024,7 @@ bool DepthToSpaceRel(const Array<Type>& types, int num_inputs, const Attrs& attr
 // Positional relay function to create DepthToSpace operator
 // used by frontend FFI
 Expr MakeDepthToSpace(Expr data, int block_size, std::string layout, std::string mode) {
-  auto attrs = make_node<SubPixelAttrs>();
+  auto attrs = make_object<SubPixelAttrs>();
   attrs->block_size = block_size;
   attrs->layout = std::move(layout);
   attrs->mode = std::move(mode);
@@ -1032,7 +1032,7 @@ Expr MakeDepthToSpace(Expr data, int block_size, std::string layout, std::string
   return CallNode::make(op, {data}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_API("relay.op.nn._make.depth_to_space").set_body_typed(MakeDepthToSpace);
+TVM_REGISTER_GLOBAL("relay.op.nn._make.depth_to_space").set_body_typed(MakeDepthToSpace);
 
 RELAY_REGISTER_OP("nn.depth_to_space")
     .describe(R"code(Rearrange input channels into spatial pixels.
@@ -1074,7 +1074,7 @@ bool SpaceToDepthRel(const Array<Type>& types, int num_inputs, const Attrs& attr
 
   // Assign output type
   reporter->Assign(types[1],
-                   TensorTypeNode::make(layout_converter.BackwardShape(oshape), data->dtype));
+                   TensorType(layout_converter.BackwardShape(oshape), data->dtype));
 
   return true;
 }
@@ -1082,14 +1082,14 @@ bool SpaceToDepthRel(const Array<Type>& types, int num_inputs, const Attrs& attr
 // Positional relay function to create SpaceToDepth operator
 // used by frontend FFI
 Expr MakeSpaceToDepth(Expr data, int block_size, std::string layout) {
-  auto attrs = make_node<SubPixelAttrs>();
+  auto attrs = make_object<SubPixelAttrs>();
   attrs->block_size = block_size;
   attrs->layout = std::move(layout);
   static const Op& op = Op::Get("nn.space_to_depth");
   return CallNode::make(op, {data}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_API("relay.op.nn._make.space_to_depth").set_body_typed(MakeSpaceToDepth);
+TVM_REGISTER_GLOBAL("relay.op.nn._make.space_to_depth").set_body_typed(MakeSpaceToDepth);
 
 RELAY_REGISTER_OP("nn.space_to_depth")
     .describe(R"code(Rearrange spatial pixels into new output channels.
