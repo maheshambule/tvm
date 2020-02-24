@@ -1001,7 +1001,7 @@ def _test_variable(data):
     size = input_tensor.shape.dims[1]
     with variable_scope.variable_scope("linear", reuse=None):
         w = variable_scope.get_variable(
-            "w", shape=[size, size], dtype=input_tensor.dtype, use_resource=True)
+            "w", shape=[size, size], dtype=input_tensor.dtype)
     math_ops.matmul(input_tensor, w)
 
     compare_tf_with_tvm(data, 'Placeholder:0', 'MatMul:0',
@@ -2865,7 +2865,6 @@ def test_placeholder():
         compare_tf_with_tvm([in_data1, in_data2], ['place1:0', 'in2:0'], 'out2:0',
                             init_global_variables=True)
 
-
 #######################################################################
 # OneHot
 # ----------------------
@@ -3038,3 +3037,6 @@ if __name__ == '__main__':
     test_forward_where()
     test_forward_matmul()
     test_forward_batch_matmul()
+
+    # Internal misc. ops
+    test_read_variable_op()
