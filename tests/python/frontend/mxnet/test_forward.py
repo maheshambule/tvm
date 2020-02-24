@@ -995,3 +995,4 @@ if __name__ == '__main__':
     test_forward_convolution()
     test_forward_deconvolution()
     test_forward_cond()
+    test_forward_make_loss()
