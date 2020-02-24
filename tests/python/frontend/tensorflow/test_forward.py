@@ -1046,7 +1046,7 @@ def test_read_variable_op():
         assert exexcinfo.value.args[0] == "Found ReadVariableOp operator in the graph. " \
                                           "Graph is not frozen. Provide a frozen graph."
 
-        # Now convert the variables to constant and run again on the tensorflow graph
+        # Now convert the variables to constant and run inference on the converted graph
         final_graph_def = tf.graph_util.convert_variables_to_constants(
             sess,
             sess.graph.as_graph_def(add_shapes=True),

@@ -2099,9 +2099,10 @@ class GraphProto(object):
         missing_operators = self._parse_import_prerequisites(graph)
 
         if missing_operators:
-            # TODO: Add check for other operators which are removed when graph is freezed
-            # Or we can try to freeze the graph and in process remove the operators which
-            # are not needed for inference
+            # TODO: ReadVariableOp gets removed when graph is frozen.
+            # Add list of other operators as well which get removed and are not needed
+            # for inference.
+            # Other approach is instead of raising error, we can freeze the graph.
             if 'ReadVariableOp' in missing_operators:
                 raise Exception("Found ReadVariableOp operator in the graph. "
                                 "Graph is not frozen. Provide a frozen graph.")
