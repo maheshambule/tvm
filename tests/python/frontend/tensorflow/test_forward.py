@@ -994,7 +994,7 @@ def test_forward_reduce():
 
 def _test_variable(data):
     """ One iteration of a variable """
-    
+
     tf.reset_default_graph()
     input_op = array_ops.placeholder(shape=data.shape, dtype=data.dtype)
     input_tensor = array_ops.reshape(input_op, data.shape)
