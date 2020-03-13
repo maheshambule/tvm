@@ -2985,6 +2985,9 @@ def test_forward_add_n():
     _test_forward_add_n(in5)
 
 
+#######################################################################
+# Dilation2D
+# ----------------------
 def _test_dilation2d(tensor_in_sizes, filter_in_sizes,
                      strides, dilations, padding):
     """ One iteration of dilation2d with given shapes and attributes """
@@ -3028,6 +3031,7 @@ def test_forward_dilation():
     _test_dilation2d([1, 224, 224, 10], [8, 8, 10], [1, 3, 1, 1], [1, 1, 1, 1], "SAME")
     _test_dilation2d([1, 3, 3, 1], [2, 2, 1], [1, 1, 1, 1], [1, 2, 2, 1], "SAME")
     _test_dilation2d([1, 3, 3, 1], [2, 2, 1], [1, 1, 1, 1], [1, 1, 2, 1], "VALID")
+
 
 # #######################################################################
 # Main
