@@ -181,6 +181,46 @@ def verify_concatenate(shapes, axis):
     for device in get_all_backend():
         check_device(device)
 
+def verify_sparse_to_dense(sparse_indices, output_shape, sparse_values, default_value, validate_indices, dense):
+
+    sparse_indices_data = np.array(sparse_indices)
+    sparse_values_data = np.array(sparse_values)
+    output_shape_data = np.array(output_shape)
+    default_value_data = np.array(default_value)
+
+    A = te.placeholder(shape=sparse_indices_data.shape, name="sparse_indices")
+    B = te.placeholder(shape=output_shape_data.shape, name="output_shape")
+    C = te.placeholder(shape=sparse_values_data.shape, name="sparse_values")
+    D = te.placeholder(shape=(), name="default_value")
+
+    E = topi.sparse_to_dense(A, B, C, default_value, validate_indices)
+
+    def check_device(device):
+        ctx = tvm.context(device, 0)
+        if not ctx.exist:
+            print("Skip because %s is not enabled" % device)
+            return
+        print("Running on target: %s" % device)
+        with tvm.target.create(device):
+            s = topi.testing.get_injective_schedule(device)(E)
+
+        foo = tvm.build(s, [A, B, C, D, E], device, name="sparse_to_dense")
+
+        sparse_indices_nd = tvm.nd.array(sparse_indices_data, ctx)
+        sparse_values_nd = tvm.nd.array(sparse_values_data, ctx)
+        output_shape_nd = tvm.nd.array(output_shape_data, ctx)
+        default_value_nd = tvm.nd.array(default_value_data, ctx)
+        out_nd = tvm.nd.empty(output_shape_data.shape, ctx=ctx, dtype=C.dtype)
+
+        foo(sparse_indices_nd, output_shape_nd, sparse_values_nd, default_value_nd, out_nd)
+        tvm.testing.assert_allclose(out_nd.asnumpy(), np.array(dense))
+
+    for device in get_all_backend():
+        check_device(device)
+
+def test_sparse_to_dense():
+    verify_sparse_to_dense([0,1,2],[5],[3,3,3],0,False,[3,3,3,0,0])
+
 def verify_stack(shapes, axis):
     tensor_l = []
     for i, shape in enumerate(shapes):
@@ -596,6 +636,8 @@ def verify_unravel_index(indices, shape, dtype):
         check_device(device)
 
 
+
+
 def test_strided_slice():
     verify_strided_slice((3, 4, 3), [0, 0, 0], [4, -5, 4], [1, -1, 2])
     verify_strided_slice((3, 4, 3), [1, 1, 0], [4, 4, 3], [2, 1, 1])
@@ -949,3 +991,4 @@ if __name__ == "__main__":
     test_where_fusion()
     test_one_hot()
     test_unravel_index()
+    test_sparse_to_dense()

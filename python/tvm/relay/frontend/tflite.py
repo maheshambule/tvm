@@ -123,6 +123,7 @@ class OperatorConverter(object):
             'SOFTMAX': self.convert_softmax,
             'SPACE_TO_BATCH_ND': self.convert_space_to_batch_nd,
             'SPACE_TO_DEPTH': self.convert_space_to_depth,
+            'SPARSE_TO_DENSE': self.convert_sparse_to_dense,
             'SPLIT': self.convert_split,
             'SQRT': self.convert_sqrt,
             'SQUARE': self.convert_square,
@@ -2038,6 +2039,26 @@ class OperatorConverter(object):
         depth_to_space_options.Init(op_options.Bytes, op_options.Pos)
         block_size = depth_to_space_options.BlockSize()
         out = _op.nn.depth_to_space(in_expr, block_size, layout='NHWC')
+
+        return out
+
+    def convert_sparse_to_dense(self, op):
+        """Convert TFLite SPARSE_TO_DENSE"""
+        try:
+            from tflite.Operator import Operator
+        except ImportError:
+            raise ImportError("The tflite package must be installed")
+
+        assert isinstance(op, Operator)
+        input_tensors = self.get_input_tensors(op)
+        assert len(input_tensors) == 4, "input tensors length should be 4"
+
+        out = _op.sparse_to_dense(
+                self.get_expr(input_tensors[0].tensor_idx),
+                self.get_expr(input_tensors[1].tensor_idx),
+                self.get_expr(input_tensors[2].tensor_idx),
+                self.get_expr(input_tensors[3].tensor_idx)
+        )
 
         return out
 

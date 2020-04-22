@@ -288,6 +288,18 @@ struct SequenceMaskAttrs : public tvm::AttrsNode<SequenceMaskAttrs> {
   }
 };  // struct SequenceMaskAttrs.
 
+
+struct SparseToDenseAttrs : public tvm::AttrsNode<SparseToDenseAttrs> {
+  bool validate_indices;
+
+
+  TVM_DECLARE_ATTRS(SparseToDenseAttrs, "relay.attrs.SparseToDenseAttrs") {
+    TVM_ATTR_FIELD(validate_indices)
+        .describe("If true, indices are checked to make sure they are sorted in lexicographic order and that there are no repeats")
+        .set_default(true);
+  }
+};
+
 /*! \brief Attributes for ndarray_size operator */
 struct NdarraySizeAttrs : public tvm::AttrsNode<NdarraySizeAttrs> {
   DataType dtype;

@@ -478,6 +478,32 @@ def test_forward_space_to_batch_nd():
     )
 
 #######################################################################
+# Sparse To Dense
+# ---------------
+
+
+def _test_sparse_to_dense(sparse_indices, sparse_values, output_shape, default_value):
+
+    with tf.Graph().as_default():
+        values = tf.placeholder(shape=sparse_values.shape, dtype=str(sparse_values.dtype), name="values")
+        indices = tf.placeholder(shape=sparse_indices.shape, dtype=str(sparse_indices.dtype), name="indices")
+        oshape = tf.placeholder(shape=output_shape.shape, dtype=str(output_shape.dtype), name="dense_shape" )
+        dv = tf.placeholder(shape=(), dtype=str(default_value.dtype), name="default_value")
+        output = tf.sparse_to_dense(indices, oshape, values, dv, True)
+
+        compare_tflite_with_tvm(
+            [sparse_indices, output_shape, sparse_values, default_value],
+            ["values", "dense_shape", "indices", "default_value"],
+            [indices, oshape, values, dv],
+            [output]
+        )
+
+def test_forward_sparse_to_dense():
+    #[0,1,2],[5],[3,3,3],0,False,[3,3,3,0,0]
+    _test_sparse_to_dense(np.array([0,1,2]), np.array([3,3,3]), np.array([5]),  np.int64(0))
+
+    pass
+#######################################################################
 # Pooling
 # -------
 def _test_pooling_iteration(input_shape, **kwargs):
@@ -1973,6 +1999,7 @@ if __name__ == '__main__':
     test_forward_spacetodepth()
 
     # NN
+    test_forward_sparse_to_dense()
     test_forward_convolution()
     test_forward_transpose_conv()
     test_forward_logistic()
