@@ -1294,10 +1294,15 @@ inline Tensor sparse_to_dense(const Tensor& sparse_indices,
 
   Array<PrimExpr> dense_tensor_shape = output_shape->shape;
   const auto rank_sparse_indices = static_cast<int>(sparse_indices->shape.size());
-  //size_t dim_size = static_cast<size_t>(GetConstInt(sparse_indices->shape[0]));
+  size_t dim_size = static_cast<size_t>(GetConstInt(sparse_indices->shape[0]));
 
   return compute(dense_tensor_shape, [&](const Array<Var>& indices) {
     PrimExpr ret = 0;
+    if (1 == rank_sparse_indices){
+      for(size_t j = 0; j < dim_size; j++){
+        ret = tvm::if_then_else(sparse_indices(j)==indices[0], sparse_values(j), ret);
+      }
+    }
     return ret;
   }, name, tag);
 }

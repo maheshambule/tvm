@@ -186,14 +186,14 @@ def verify_sparse_to_dense(sparse_indices, output_shape, sparse_values, default_
     sparse_indices_data = np.array(sparse_indices)
     sparse_values_data = np.array(sparse_values)
     output_shape_data = np.array(output_shape)
-    default_value_data = np.array(default_value)
+    #default_value_data = np.array(default_value)
 
     A = te.placeholder(shape=sparse_indices_data.shape, name="sparse_indices")
     B = te.placeholder(shape=output_shape_data.shape, name="output_shape")
     C = te.placeholder(shape=sparse_values_data.shape, name="sparse_values")
     D = te.placeholder(shape=(), name="default_value")
 
-    E = topi.sparse_to_dense(A, B, C, default_value, validate_indices)
+    E = topi.sparse_to_dense(A, B, C, D, validate_indices)
 
     def check_device(device):
         ctx = tvm.context(device, 0)
@@ -209,10 +209,10 @@ def verify_sparse_to_dense(sparse_indices, output_shape, sparse_values, default_
         sparse_indices_nd = tvm.nd.array(sparse_indices_data, ctx)
         sparse_values_nd = tvm.nd.array(sparse_values_data, ctx)
         output_shape_nd = tvm.nd.array(output_shape_data, ctx)
-        default_value_nd = tvm.nd.array(default_value_data, ctx)
+        #default_value_nd = tvm.nd.array(default_value_data, ctx)
         out_nd = tvm.nd.empty(output_shape_data.shape, ctx=ctx, dtype=C.dtype)
 
-        foo(sparse_indices_nd, output_shape_nd, sparse_values_nd, default_value_nd, out_nd)
+        foo(sparse_indices_nd, output_shape_nd, sparse_values_nd, default_value, out_nd)
         tvm.testing.assert_allclose(out_nd.asnumpy(), np.array(dense))
 
     for device in get_all_backend():
