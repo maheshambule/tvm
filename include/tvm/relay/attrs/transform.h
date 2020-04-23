@@ -291,12 +291,15 @@ struct SequenceMaskAttrs : public tvm::AttrsNode<SequenceMaskAttrs> {
 
 struct SparseToDenseAttrs : public tvm::AttrsNode<SparseToDenseAttrs> {
   bool validate_indices;
+  Array<Integer> output_shape;
 
 
   TVM_DECLARE_ATTRS(SparseToDenseAttrs, "relay.attrs.SparseToDenseAttrs") {
     TVM_ATTR_FIELD(validate_indices)
         .describe("If true, indices are checked to make sure they are sorted in lexicographic order and that there are no repeats")
         .set_default(true);
+       TVM_ATTR_FIELD(output_shape)
+        .describe("If true, indices are checked to make sure they are sorted in lexicographic order and that there are no repeats");
   }
 };
 

@@ -489,12 +489,12 @@ def _test_sparse_to_dense(sparse_indices, sparse_values, output_shape, default_v
         indices = tf.placeholder(shape=sparse_indices.shape, dtype=str(sparse_indices.dtype), name="indices")
         oshape = tf.placeholder(shape=output_shape.shape, dtype=str(output_shape.dtype), name="dense_shape" )
         dv = tf.placeholder(shape=(), dtype=str(default_value.dtype), name="default_value")
-        output = tf.sparse_to_dense(indices, oshape, values, dv, True)
+        output = tf.sparse_to_dense(sparse_indices, oshape, values, dv, True)
 
         compare_tflite_with_tvm(
-            [sparse_indices, output_shape, sparse_values, default_value],
-            ["values", "dense_shape", "indices", "default_value"],
-            [indices, oshape, values, dv],
+            [ output_shape, sparse_values, default_value],
+            [ "dense_shape", "indices", "default_value"],
+            [oshape, values, dv],
             [output]
         )
 

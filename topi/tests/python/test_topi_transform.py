@@ -183,17 +183,17 @@ def verify_concatenate(shapes, axis):
 
 def verify_sparse_to_dense(sparse_indices, output_shape, sparse_values, default_value, validate_indices, dense):
 
-    sparse_indices_data = np.array(sparse_indices)
-    sparse_values_data = np.array(sparse_values)
-    output_shape_data = np.array(output_shape)
-    #default_value_data = np.array(default_value)
+    sparse_indices_data = np.array(sparse_indices).astype("int32")
+    sparse_values_data = np.array(sparse_values).astype("int32")
+    output_shape_data = np.array(output_shape).astype("int32")
+    default_value_data = np.array(default_value).astype("int32")
 
-    A = te.placeholder(shape=sparse_indices_data.shape, name="sparse_indices")
-    B = te.placeholder(shape=output_shape_data.shape, name="output_shape")
-    C = te.placeholder(shape=sparse_values_data.shape, name="sparse_values")
-    D = te.placeholder(shape=(), name="default_value")
+    A = te.placeholder(shape=sparse_indices_data.shape, name="sparse_indices", dtype="int32")
+    #B = te.placeholder(shape=output_shape_data.shape, name="output_shape", , dtype="int32")
+    C = te.placeholder(shape=sparse_values_data.shape, name="sparse_values", dtype="int32")
+    D = te.placeholder(shape=(), name="default_value",  dtype="int32")
 
-    E = topi.sparse_to_dense(A, B, C, D, validate_indices)
+    E = topi.sparse_to_dense(A, output_shape, C, D, validate_indices)
 
     def check_device(device):
         ctx = tvm.context(device, 0)
@@ -204,22 +204,22 @@ def verify_sparse_to_dense(sparse_indices, output_shape, sparse_values, default_
         with tvm.target.create(device):
             s = topi.testing.get_injective_schedule(device)(E)
 
-        foo = tvm.build(s, [A, B, C, D, E], device, name="sparse_to_dense")
+        foo = tvm.build(s, [A, C, D, E], device, name="sparse_to_dense")
 
         sparse_indices_nd = tvm.nd.array(sparse_indices_data, ctx)
         sparse_values_nd = tvm.nd.array(sparse_values_data, ctx)
         output_shape_nd = tvm.nd.array(output_shape_data, ctx)
-        #default_value_nd = tvm.nd.array(default_value_data, ctx)
-        out_nd = tvm.nd.empty(output_shape_data.shape, ctx=ctx, dtype=C.dtype)
+        default_value_nd = tvm.nd.array(default_value_data, ctx)
+        out_nd = tvm.nd.empty(output_shape_data, ctx=ctx, dtype=C.dtype)
 
-        foo(sparse_indices_nd, output_shape_nd, sparse_values_nd, default_value, out_nd)
+        foo(sparse_indices_nd, sparse_values_nd, default_value_nd, out_nd)
         tvm.testing.assert_allclose(out_nd.asnumpy(), np.array(dense))
 
     for device in get_all_backend():
         check_device(device)
 
 def test_sparse_to_dense():
-    verify_sparse_to_dense([0,1,2],[5],[3,3,3],0,False,[3,3,3,0,0])
+    verify_sparse_to_dense([0,1,4],[5],[3,3,3],0,False,[3,3,0,0,3])
 
 def verify_stack(shapes, axis):
     tensor_l = []

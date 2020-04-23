@@ -1285,26 +1285,33 @@ inline Tensor layout_transform(const Tensor& src,
  * \return Tensor of output_shape.
  */
 inline Tensor sparse_to_dense(const Tensor& sparse_indices,
-					const Tensor& output_shape,
+					 Array<Integer>  output_shape,
 					const Tensor& sparse_values,
 					const Tensor& default_value,
                     bool  validate_indices,
                     const std::string name = "T_sparse_to_dense",
                     const std::string tag = kInjective) {
 
-  Array<PrimExpr> dense_tensor_shape = output_shape->shape;
-  const auto rank_sparse_indices = static_cast<int>(sparse_indices->shape.size());
-  size_t dim_size = static_cast<size_t>(GetConstInt(sparse_indices->shape[0]));
+  //const auto rank_sparse_indices = static_cast<int>(sparse_indices->shape.size());
+  //size_t dim_size = static_cast<size_t>(GetConstInt(sparse_indices->shape[0]));
 
-  return compute(dense_tensor_shape, [&](const Array<Var>& indices) {
-    PrimExpr ret = 0;
-    if (1 == rank_sparse_indices){
-      for(size_t j = 0; j < dim_size; j++){
-        ret = tvm::if_then_else(sparse_indices(j)==indices[0], sparse_values(j), ret);
-      }
+std::cout<<"in compute \n";
+Array<PrimExpr>  output_shape1;
+for(auto l : output_shape){
+  output_shape1.push_back(l);
+}
+  return compute(output_shape1, [&](const Array<Var>& indices) {
+    PrimExpr ret = default_value[0];
+
+     std::cout<<" in lambda compute \n";
+    for (int i = 0; i < GetConstInt(sparse_indices->shape[0]) ; ++i) {
+       std::cout<<" in for loop \n";
+       ret = if_then_else(indices[0] == sparse_indices(i), sparse_values[i],  ret);
     }
     return ret;
   }, name, tag);
+
+
 }
 
 

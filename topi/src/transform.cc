@@ -142,7 +142,13 @@ TVM_REGISTER_GLOBAL("topi.unravel_index")
 
 TVM_REGISTER_GLOBAL("topi.sparse_to_dense")
 .set_body([](TVMArgs args, TVMRetValue *rv) {
+  std::cout << "in \n";
+   Array<Integer> shape =  ArrayOrInt(args[1]);
+  std::cout<<shape;
+  std::cout << "in--- \n";
+
   *rv = sparse_to_dense(args[0], args[1], args[2], args[3], args[4]);
+  std::cout << "out result \n";
   });
 
 TVM_REGISTER_GLOBAL("topi.matmul")
