@@ -439,7 +439,9 @@ class RelayBuildModule : public runtime::ModuleNode {
       IRModule relay_module,
       const std::unordered_map<std::string, tvm::runtime::NDArray>& params) {
     // Relay IRModule -> IRModule optimizations.
+    std::cout << "IRMODULE before "<<relay_module<<" \n";
     relay_module = Optimize(relay_module, targets_, params);
+    std::cout << "IRMODULE after  "<<relay_module<<" \n";
     // Get the updated function.
     auto func = Downcast<Function>(relay_module->Lookup("main"));
 
@@ -450,8 +452,10 @@ class RelayBuildModule : public runtime::ModuleNode {
 
     ret_.graph_json = graph_codegen_->GetJSON();
     ret_.params = graph_codegen_->GetParams();
+    
 
     auto lowered_funcs = graph_codegen_->GetIRModule();
+    std::cout << "lowered_funcs   "<<lowered_funcs<<" \n";
 
     // When there is no lowered_funcs due to reasons such as optimization.
     if (lowered_funcs.size() == 0) {

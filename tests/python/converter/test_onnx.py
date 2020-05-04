@@ -21,6 +21,7 @@ import tvm
 from tvm import relay
 from tvm.relay.converter import to_onnx
 import onnxruntime as rt
+from tvm.target import codegen_onnx
 
 
 def func_to_onnx(func, name):
@@ -39,12 +40,110 @@ def run_onnx(onnx_model, input_data):
     res = sess.run([output_name], input_names)
     return res[0]
 
+def _convert_args(expr, args, kwargs):
+        """
+        Convert the combination of arguments and keyword arguments
+        into a sequence of arguments that may be passed to
+        a Relay evaluator.
+
+        We first provide all positional arguments, and then attempt
+        to fill in the remaining arguments using the keyword arguments. We
+        map the keyword arguments to the corresponding parameters, if there
+        is an ambiguity between positional and keyword arguments this
+        procedure will raise an error.
+
+        Parameters
+        ----------
+        expr: relay.Expr
+            The expression to evaluate
+
+        args: List[tvm.nd.NDArray]
+            The arguments to pass to the evaluator.
+
+        kwargs: Dict[str, tvm.NDArrray]
+            The keyword arguments to pass to the evaluator.
+
+        Returns:
+            args: List[tvm.nd.NDArray]
+                The new arguments with all keyword arguments placed in the correct slot.
+        """
+        assert expr is not None
+
+        if not kwargs:
+            return args
+        from tvm.relay.function import Function
+
+        if kwargs and not isinstance(expr, Function):
+            raise Exception("can only supply keyword parameters for a "
+                            "relay.Function, found {0}".format(expr))
+
+        params = expr.params
+        param_names = [p.name_hint for p in params]
+        num_of_args = len(args)
+
+        cargs = list(args)[:]
+        for i, name in enumerate(param_names):
+            if i < num_of_args:
+                if kwargs.get(name):
+                    raise Exception(
+                        "duplicate argument supplied in "
+                        "both positional args (at position: {0}), "
+                        "and keyword argument (with name: {1})".format(i, name))
+            else:
+                cargs.append(kwargs[name])
+
+        if len(cargs) != len(params):
+            raise Exception(
+                "insufficient arguments, expected "
+                "{0}, provided {1}".format(len(cargs), len(params)))
+
+        return tuple(cargs)
 
 def run_relay(func, data_tuple):
-    target = 'llvm'
-    ctx = tvm.context('llvm', 0)
-    intrp = relay.create_executor("graph", ctx=ctx, target=target)
-    relay_res = intrp.evaluate(func)(*data_tuple)
+    target = 'onnx'
+    ctx = tvm.context('onnx', 0)
+    # intrp = relay.create_executor("graph", ctx=ctx, target=target)
+    # relay_res = intrp.evaluate(func)(*data_tuple)
+
+    from tvm.ir import IRModule
+    mod = IRModule()
+    expr = func
+    mod["main"] = expr
+
+    from tvm.relay import transform
+    mod = transform.AnnotateTarget(["onnx"])(mod)
+    mod = transform.MergeCompilerRegions()(mod)
+    mod = transform.PartitionGraph()(mod)
+
+    from tvm.relay import ty as _ty
+    from tvm.runtime import ndarray as _nd
+    from tvm.contrib import graph_runtime as _graph_rt
+
+    ret_type = mod["main"].checked_type.ret_type
+    num_outputs = len(ret_type.fields) if isinstance(ret_type, _ty.TupleType) else 1
+    with relay.build_config(opt_level=3, disabled_pass=['FuseOps']):
+        graph_json, mod1, params = relay.build(mod, target)
+    gmodule = _graph_rt.create(graph_json, mod1, ctx)
+    if params:
+        gmodule.set_input(**params)
+
+    def _graph_wrapper(*args, **kwargs):
+        args = _convert_args(mod["main"], args, kwargs)
+        # Create map of inputs.
+        for i, arg in enumerate(args):
+            gmodule.set_input(i, arg)
+        # Run the module, and fetch the output.
+        gmodule.run()
+        # make a copy so multiple invocation won't hurt perf.
+        if num_outputs == 1:
+            return gmodule.get_output(0).copyto(_nd.cpu(0))
+        outputs = []
+        for i in range(num_outputs):
+            outputs.append(gmodule.get_output(i).copyto(_nd.cpu(0)))
+        return outputs
+
+    relay_res = _graph_wrapper(*data_tuple)
+
     return relay_res.asnumpy()
 
 

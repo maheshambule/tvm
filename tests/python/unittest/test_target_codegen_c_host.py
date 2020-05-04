@@ -28,7 +28,7 @@ def test_add():
     s = te.create_schedule(C.op)
 
     def check_c():
-        mhost = tvm.build(s, [A, B, C], "c", name="fadd")
+        mhost = tvm.build(s, [A, B, C], "onnx", name="fadd")
         temp = util.tempdir()
         path_dso = temp.relpath("temp.so")
         mhost.export_library(path_dso)

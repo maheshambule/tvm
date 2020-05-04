@@ -43,9 +43,12 @@ namespace tvm {
 namespace codegen {
 
 runtime::Module Build(IRModule mod, const Target& target) {
+
+  //std::cout << "before skipassert"<<mod<<"n";
   if (BuildConfig::Current()->disable_assert) {
     mod = tir::transform::SkipAssert()(mod);
   }
+  //std::cout << "after skipassert"<<mod<<"n";
 
   std::string build_f_name = "target.build." + target->target_name;
   // the build function.

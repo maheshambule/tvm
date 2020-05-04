@@ -291,6 +291,7 @@ runtime::Module build(const Map<Target, IRModule>& inputs,
     auto& mhost = pair.first;
     auto& mdevice = pair.second;
 
+    std::cout <<"it.second " << it.second <<"\n";
     mhost_all->Update(mhost);
     if (mdevice->functions.size() != 0) {
       device_modules.push_back(codegen::Build(mdevice, it.first));

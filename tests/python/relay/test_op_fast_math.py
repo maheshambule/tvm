@@ -35,7 +35,7 @@ def test_fastmath():
         mod = tvm.IRModule.from_expr(func)
 
         with relay.build_config(opt_level=3, required_pass=['FastMath']):
-            graph, lib, params = relay.build(mod, target="llvm", params=None)
+            graph, lib, params =  relay.build(mod, target="llvm", params=None)
 
         # Check that the op related to fast math have been convered to function in lib
         func_name = "fused_" + name

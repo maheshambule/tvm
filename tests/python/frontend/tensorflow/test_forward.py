@@ -2277,6 +2277,7 @@ def test_forward_ptb():
                       'Model/RNN/RNN/multi_rnn_cell/cell_0/lstm_cell/LSTMBlockCell_h': 'float32'}
         target = 'llvm'
         with relay.build_config(opt_level=0):
+
             graph, lib, params = relay.build(mod,
                                              target,
                                              params=params)

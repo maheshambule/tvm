@@ -91,7 +91,10 @@ Target CreateTarget(const std::string& target_name,
     t->device_type = kDLMicroDev;
   } else if (target_name == "c" || target_name == "llvm") {
     t->keys_array.push_back("cpu");
-  } else if (target_name == "cuda" || target_name == "nvptx") {
+  }else if (target_name == "onnx") {
+    t->keys_array.push_back("cpu");
+  } 
+  else if (target_name == "cuda" || target_name == "nvptx") {
     t->device_type = kDLGPU;
     t->keys_array.push_back("cuda");
     t->keys_array.push_back("gpu");

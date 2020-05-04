@@ -89,7 +89,7 @@ class CSourceModuleNode : public runtime::ModuleNode {
     return PackedFunc();
   }
 
-  std::string GetSource(const std::string& format) final {
+  std::string GetSource(const std::string& formatx) final {
     return code_;
   }
 
