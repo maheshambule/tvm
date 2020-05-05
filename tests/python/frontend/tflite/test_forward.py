@@ -406,7 +406,7 @@ def test_forward_transpose():
 def _test_cast(data, cast_dtype):
     """ One iteration of CAST """
     with tf.Graph().as_default():
-        in_data = array_ops.placeholder(shape=data.shape, dtype=data.dtype)
+        in_data = array_ops.placeholder(shape=data.shape, dtype=data.dtype, name="in1")
         out = math_ops.cast(in_data, cast_dtype)
         compare_tflite_with_tvm(data, 'Placeholder:0', [in_data], [out])
 

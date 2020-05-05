@@ -100,8 +100,8 @@ def _convert_args(expr, args, kwargs):
         return tuple(cargs)
 
 def run_relay(func, data_tuple):
-    target = 'onnx'
-    ctx = tvm.context('onnx', 0)
+    target = 'llvm'
+    ctx = tvm.context('llvm', 0)
     # intrp = relay.create_executor("graph", ctx=ctx, target=target)
     # relay_res = intrp.evaluate(func)(*data_tuple)
 
@@ -111,9 +111,10 @@ def run_relay(func, data_tuple):
     mod["main"] = expr
 
     from tvm.relay import transform
-    mod = transform.AnnotateTarget(["onnx"])(mod)
-    mod = transform.MergeCompilerRegions()(mod)
+    # mod = transform.AnnotateTarget(["onnx"])(mod)
+    # mod = transform.MergeCompilerRegions()(mod)
     mod = transform.PartitionGraph()(mod)
+
 
     from tvm.relay import ty as _ty
     from tvm.runtime import ndarray as _nd
@@ -159,7 +160,10 @@ def test_add():
     t2 = relay.TensorType((5, 10, 5))
     x = relay.var("x", t1, dtype=dtype)
     y = relay.var("y", t2, dtype=dtype)
-    z = relay.add(x, y)
+    _x = relay.annotation.compiler_begin(x, "onnx")
+    _y = relay.annotation.compiler_begin(y, "onnx")
+    z = relay.add(_x, _y)
+    z = relay.annotation.compiler_end(z, "onnx")
     func = relay.Function([x, y], z)
 
     x_data = np.random.rand(5, 10, 5).astype(dtype)
