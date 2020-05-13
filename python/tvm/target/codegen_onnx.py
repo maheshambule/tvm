@@ -6,6 +6,7 @@ import shutil
 
 def create_runtime_module(model_dir, fmt):
     runtime_func = "runtime.ONNXModuleCreate"
+    #runtime_func = "runtime.CSourceModuleCreate"
     fcreate = tvm._ffi.get_global_func(runtime_func)
     return fcreate(model_dir, fmt)
 

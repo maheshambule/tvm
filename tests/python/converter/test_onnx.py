@@ -154,6 +154,12 @@ def verify_results(relay_func, indata, test_name, rtol=1e-7, atol=0):
     np.testing.assert_allclose(relay_res, onnx_res, rtol=rtol, atol=atol)
 
 
+def test1():
+    my_func = tvm.get_global_func("tvm.contrib.test.simple_test")
+    test_input = tvm.nd.array(np.array([1, 2, 3]))
+    test_output = my_func(test_input)
+    print(test_output)
+
 def test_add():
     dtype = 'float32'
     t1 = relay.TensorType((5, 10, 5))

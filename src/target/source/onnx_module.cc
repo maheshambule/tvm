@@ -27,6 +27,45 @@
 #include "../../runtime/file_util.h"
 #include "../../runtime/meta_data.h"
 
+#define UNW_LOCAL_ONLY
+#include <cxxabi.h>
+#include <libunwind.h>
+#include <cstdio>
+#include <cstdlib>
+
+void backtrace() {
+  unw_cursor_t cursor;
+  unw_context_t context;
+
+  // Initialize cursor to current frame for local unwinding.
+  unw_getcontext(&context);
+  unw_init_local(&cursor, &context);
+
+  // Unwind frames one by one, going up the frame stack.
+  while (unw_step(&cursor) > 0) {
+    unw_word_t offset, pc;
+    unw_get_reg(&cursor, UNW_REG_IP, &pc);
+    if (pc == 0) {
+      break;
+    }
+    std::printf("0x%llx:", pc);
+
+    char sym[256];
+    if (unw_get_proc_name(&cursor, sym, sizeof(sym), &offset) == 0) {
+      char* nameptr = sym;
+      int status;
+      char* demangled = abi::__cxa_demangle(sym, nullptr, nullptr, &status);
+      if (status == 0) {
+        nameptr = demangled;
+      }
+      std::printf(" (%s+0x%llx)\n", nameptr, offset);
+      std::free(demangled);
+    } else {
+      std::printf(" -- error: unable to obtain symbol name for this frame\n");
+    }
+  }
+}
+
 namespace tvm {
 namespace codegen {
 
@@ -55,53 +94,65 @@ class ONNXSourceModuleNodeNode : public runtime::ModuleNode {
   PackedFunc GetFunction(
       const std::string& name,
       const ObjectPtr<Object>& sptr_to_self) final {
-//    LOG(FATAL) << "C Source module cannot execute, to get executable module"
-//               << " build TVM with \'" << fmt_ << "\' runtime support";
+//       LOG(FATAL) << "C Source module cannot execute, to get executable module"
+//              << " build TVM with \'" << fmt_ << "\' runtime support";
+//       return PackedFunc()
 
-     std::cout << "in runtime aaa -------------"<<"\n";
+
+      std::cout << "in runtime aaa -------------" << "\n";
       this->current_subgraph_ = name;
+
       return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
-      std::cout << "in runtime packed 1 -------------"<<"\n";
-      for (auto i = 0; i < args.size(); ++i) {
-          CHECK(args[i].type_code() == kTVMNDArrayHandle ||
-                args[i].type_code() == kTVMDLTensorHandle)
-              << "Expect NDArray or DLTensor as inputs"
-              << "\n";
-          if (args[i].type_code() == kTVMDLTensorHandle) {
+      std::cout << "in runtime packed 1 -------------" << "\n";
+      //backtrace();
+      int i =0;
+       if (args[i].type_code() == kTVMDLTensorHandle) {
             DLTensor* arg = args[i];
-            this->data_entry_[i].CopyFrom(arg);
-              //std::cout << "in runtime packed arg -------------"<<arg<<"\n";
-          } else {
-            runtime::NDArray arg = args[i];
-            this->data_entry_[i].CopyFrom(arg);
-              //std::cout << "in runtime packed arg -------------"<<arg<<"\n";
+            std::cout << "in runtime packed 2 -------------" << "\n";
+            std::cout << "in shape " << *(arg->shape) << "\n";
+            
+            // NDArray data;
+
+            // CopyFrom(arg);
+
+              DLContext ctx;
+              ctx.device_type = static_cast<DLDeviceType>(1);
+              ctx.device_id = 0;
+          //  this->data_entry_[i] = runtime::NDArray::Empty(arg->shape, DLDataType{kDLFloat, 32, 1}, ctx);
+          //  this->data_entry_[i].CopyFrom(arg);
           }
 
+//       for (auto i = 0; i < args.size(); ++i) {
+//          CHECK(args[i].type_code() == kTVMNDArrayHandle ||
+//                args[i].type_code() == kTVMDLTensorHandle)
+//              << "Expect NDArray or DLTensor as inputs"
+//              << "\n";
+//          if (args[i].type_code() == kTVMDLTensorHandle) {
+//            DLTensor* arg = args[i];
+//            this->data_entry_[i].CopyFrom(arg);
+//          } else {
+//            runtime::NDArray arg = args[i];
+//            this->data_entry_[i].CopyFrom(arg);
+//          }
+//        }
           // runtime::NDArray arg = args[i];
-          //   this->data_entry_[i].CopyFrom(arg);
+          //  this->data_entry_[i].CopyFrom(arg);
 
-        }
 
-//       std::string ext_name = "onnxruntime";
-//       auto pf = tvm::runtime::Registry::Get(ext_name);
-//       CHECK(pf) << "Failed to find the codegen tool for " << ext_name << "\n";
+
+       std::string ext_name = "onnxruntime1";
+       auto pf = tvm::runtime::Registry::Get(ext_name);
+       CHECK(pf) << "Failed to find the codegen tool for " << ext_name << "\n";
 //       std::string path = code_ + current_subgraph_ + fmt_;ex
 
 //       std::cout << "in packed 2 -------------";
-//        DLTensor* out = (*pf)(path, 2);
-// std::cout << "in packed 3 -------------";
+//       DLTensor* out = (*pf)(path, 2);
+//       std::cout << "in packed 3 -------------";
 
      // *rv = this->data_entry_.back();
 
-             auto out_idx = graph_[this->curr_subgraph_].back().output;
-        if (args[args.size() - 1].type_code() == kTVMDLTensorHandle) {
-          DLTensor* arg = args[args.size() - 1];
-          this->data_entry_[out_idx].CopyTo(arg);
-        } else {
-          NDArray arg = args[args.size() - 1];
-          this->data_entry_[out_idx].CopyTo(arg);
-        }
-        *rv = data_entry_.back();
+
+        // *rv = data_entry_.back();
         
 
       });
@@ -140,5 +191,18 @@ runtime::Module ONNXSourceModuleNodeCreate(std::string code, std::string fmt) {
 
 TVM_REGISTER_GLOBAL("runtime.ONNXModuleCreate")
 .set_body_typed(ONNXSourceModuleNodeCreate);
+
+
+
+ void simple_test(TVMArgs args, TVMRetValue* rv) {
+  //DLTensor* input = args[0];
+  std::cout << "aaaa" << args[0].type_code() << "\n";
+  // runtime::NDArray  a;
+  // a.CopyFrom(input);
+  *rv = args[0];
+}
+
+TVM_REGISTER_GLOBAL("tvm.contrib.test.simple_test").set_body(simple_test);
+
 }  // namespace codegen
 }  // namespace tvm
